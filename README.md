@@ -25,22 +25,3 @@ Google:
     GOOGLE_SPREADSHEET_ID: ""
 ```
 This step is much more simple. You need to simply get the ID to your spreadsheet which is found in the URL of that spreadsheet. Example URL: `https://docs.google.com/spreadsheets/d/1KU8TXn5QYtZnQxEBIzI41QygNKrehviEoBbmQ8dOFIs/edit#gid=0` Example ID: `1KU8TXn5QYtZnQxEBIzI41QygNKrehviEoBbmQ8dOFIs`.
-
-```yml
-Dropbox:
-    DROPBOX_ACCESS_TOKEN: ""
-```
-Just like Google, Dropbox requires an access token as well. You can go to this link: https://www.dropbox.com/developers/apps/ and "Create app". Click "Scoped access" and "Full Dropbox". You can name this app anything you want and "Create app". After it's created, click on "Permissions" and select everything EXCEPT OpenID Scopes. After all permissions are selected, go to "Settings" and "Generate access token". Lastly, simply update the "DROPBOX_ACCESS_TOKEN" in your config.
-
-```yml
-Dropbox:
-    DROPBOX_FILE_PATH: ""
-```
-This is where you will input the path where you want the file to be uploaded in. You can leave it as just the txt file or you can specify a specific path. `/path/to/your_file_name.txt` is an example of a specific path and `your_file_name.txt` is an example of leaving it as the txt file. This will automatically create the folders necessary for the path.
-
-```yml
-Dropbox:
-    APP_KEY: ""
-    APP_SECRET: ""
-```
-This is found in the same place as the access token. This allows you to be assisted with the regenerate token process.

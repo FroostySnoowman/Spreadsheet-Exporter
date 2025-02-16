@@ -1,3 +1,5 @@
 config.yml
 .DS_STORE
-client_secret_149337876901-lgo7irtp4bi9cio5e5a3erecaearubbj.apps.googleusercontent.com.json
+client_secret*
+exported_column.txt
+old.py

@@ -1,92 +1,98 @@
-import webbrowser
-import requests
-import dropbox
+import os
 import asyncio
 import pathlib
-import base64
 import yaml
-import json
-from datetime import datetime, timedelta
-from ruamel.yaml import YAML
 from gsheets import Sheets
+from flask import Flask, send_file
+from threading import Thread
 
-# Function to load configuration from the YAML file
+app = Flask(__name__)
+
 def load_config():
-    with open(f'{pathlib.Path(__file__).parent.absolute()}/config.yml', 'r') as file:
+    config_path = f'{pathlib.Path(__file__).parent.absolute()}/config.yml'
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
+    with open(config_path, 'r') as file:
         data = yaml.safe_load(file)
     return data
 
 config = load_config()
 
 async def export_spreadsheet():
+    print("Exporting spreadsheet...")
     sheets = Sheets.from_files(f'{pathlib.Path(__file__).parent.absolute()}/{config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"]}')
     spreadsheet = sheets[config["Google"]["GOOGLE_SPREADSHEET_ID"]]
     sheet = spreadsheet.sheets[0]
-    df = sheet.to_frame()
-    df.to_csv(f'{pathlib.Path(__file__).parent.absolute()}/{config["General"]["FILE_NAME"]}', sep='\t', index=False)
 
-async def upload_txt():
-    dbx_token = config["Dropbox"]["DROPBOX_ACCESS_TOKEN"]
-    dbx = dropbox.Dropbox(dbx_token)
-    with open(f'{pathlib.Path(__file__).parent.absolute()}/{config["General"]["FILE_NAME"]}', "rb") as f:
-        dbx.files_upload(f.read(), config["Dropbox"]["DROPBOX_FILE_PATH"], mode=dropbox.files.WriteMode('overwrite'))
-    print(f"Successfully uploaded the file to Dropbox at {datetime.now()}")
+    df = sheet.to_frame(header=None).reset_index(drop=True)
+    df.columns = [str(i+1) for i in range(df.shape[1])]
 
-async def main():
-    await export_spreadsheet()
-    await upload_txt()
+    export_mode = config["General"]["ExportMode"]
+    file_path = None
+
+    if export_mode == "single_column":
+        column_name = config["General"].get("ColumnName", "")
+        file_path = f'{pathlib.Path(__file__).parent.absolute()}/{config["General"]["TXT_FILE_NAME"]}'
+
+        if column_name in df.columns:
+            df[column_name].astype(str).to_csv(file_path, index=False, header=False)
+            print(f"Exported single column '{column_name}' to {file_path}")
+        else:
+            print(f"Error: Column '{column_name}' not found in spreadsheet.")
+            return None
+
+    elif export_mode == "full_spreadsheet":
+        export_format = config["General"].get("ExportFormat", "csv").lower()
+        file_path = f'{pathlib.Path(__file__).parent.absolute()}/{config["General"]["FILE_NAME"]}'
+
+        if export_format == "csv":
+            df.to_csv(file_path, sep='\t', index=False)
+            print(f"Exported full spreadsheet to {file_path} as CSV.")
+        elif export_format == "xlsx":
+            df.to_excel(file_path, index=False)
+            print(f"Exported full spreadsheet to {file_path} as XLSX.")
+        else:
+            print(f"Error: Unsupported export format '{export_format}'.")
+            return None
+
+    if not os.path.exists(file_path):
+        print(f"File was not created: {file_path}")
+    return file_path
+
+async def initial_export():
+    file_path = await export_spreadsheet()
+    if file_path and os.path.exists(file_path):
+        print(f"Initial file ready: {file_path}")
+    else:
+        print("Initial export failed.")
 
 async def run_every_hour():
-    global config
-    try:
-        await main()
-        while True:
-            now = datetime.now()
-            next_run = now + timedelta(hours=1)
-            next_run = next_run.replace(minute=now.minute, second=0, microsecond=0)
-            seconds_until_next_run = (next_run - now).total_seconds()
-            await asyncio.sleep(seconds_until_next_run)
-            await main()
-    except dropbox.exceptions.AuthError:
-        url = f'https://www.dropbox.com/oauth2/authorize?client_id={config["Dropbox"]["APP_KEY"]}&' \
-            f'response_type=code&token_access_type=offline'
-        webbrowser.open(url)
+    while True:
+        await export_spreadsheet()
+        await asyncio.sleep(3600)
 
-        access_code_generated = input("Enter access token: ")
+def start_asyncio_loop():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(run_every_hour())
 
-        basic_auth = base64.b64encode(f'{config["Dropbox"]["APP_KEY"]}:{config["Dropbox"]["APP_SECRET"]}'.encode()).decode()
+thread = Thread(target=start_asyncio_loop)
+thread.daemon = True
+thread.start()
 
-        headers = {
-            'Authorization': f"Basic {basic_auth}",
-            'Content-Type': 'application/x-www-form-urlencoded',
-        }
+@app.route('/download', methods=['GET'])
+def download_latest_file():
+    export_format = config["General"].get("ExportFormat", "csv").lower()
+    file_name = config["General"]["TXT_FILE_NAME"] if export_format == "csv" else config["General"]["FILE_NAME"]
+    file_path = f'{pathlib.Path(__file__).parent.absolute()}/{file_name}'
 
-        data = f'code={access_code_generated}&grant_type=authorization_code'
+    print(f"Attempting to serve file: {file_path}")
 
-        response = requests.post('https://api.dropboxapi.com/oauth2/token',
-                                data=data,
-                                headers=headers)
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True)
+    else:
+        return "No exported file available yet.", 404
 
-        new_access_token = json.loads(response.text)['access_token']
-
-        new_yaml = YAML()
-        new_yaml.preserve_quotes = True
-        new_yaml.indent(mapping=4, sequence=4, offset=2)
-        with open(f'{pathlib.Path(__file__).parent.absolute()}/config.yml', 'r') as file:
-            new_data = new_yaml.load(file)
-        new_data['Dropbox']['DROPBOX_ACCESS_TOKEN'] = new_access_token
-
-        with open(f'{pathlib.Path(__file__).parent.absolute()}/config.yml', 'w') as file:
-            new_yaml.dump(new_data, file)
-        
-        config = load_config()
-
-        await main()
-
-if __name__ == "__main__":
-    print("Script has started running!")
-    asyncio.run(run_every_hour())
-
-if __name__ == "__main__":
-    print("Script has started running!")
-    asyncio.run(run_every_hour())
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=config["General"]["WEBSERVER_PORT"], threaded=True)

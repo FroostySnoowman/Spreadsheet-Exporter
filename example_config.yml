@@ -1,12 +1,11 @@
 General:
-    FILE_NAME: "your_file_name.txt"
+    ExportMode: "single_column" # single_column or full_spreadsheet
+    ColumnName: "1" # column name to be exported if ExportMode is single_column
+    TXT_FILE_NAME: "exported_column.txt" # the output file
+    ExportFormat: "csv" # csv or xlsx
+    FILE_NAME: "exported_data.csv" # the output file
+    WEBSERVER_PORT: 5000
 
 Google:
     GOOGLE_CLIENT_SECRET_FILE_NAME: ""
     GOOGLE_SPREADSHEET_ID: ""
-
-Dropbox:
-    APP_KEY: ""
-    APP_SECRET: ""
-    DROPBOX_ACCESS_TOKEN: ""
-    DROPBOX_FILE_PATH: "/path/to/your_file_name.txt" # must start with "/"
