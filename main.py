@@ -34,12 +34,16 @@ def get_credentials():
         
         credentials = tools.run_flow(flow, store, flags=tools.argparser.parse_known_args(["--noauth_local_webserver"])[0])
     
-    return credentials
+    with open(creds_path, "w") as creds_file:
+        creds_file.write(credentials.to_json())
+
+    return creds_path
 
 async def export_spreadsheet():
     print("Exporting spreadsheet...")
-    credentials = get_credentials()
-    sheets = Sheets.from_files(credentials)
+    creds_path = get_credentials()
+
+    sheets = Sheets.from_files(creds_path)
     spreadsheet = sheets[config["Google"]["GOOGLE_SPREADSHEET_ID"]]
     sheet = spreadsheet.sheets[0]
 
