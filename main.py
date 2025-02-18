@@ -23,19 +23,19 @@ config = load_config()
 def get_credentials():
     creds_path = f'{pathlib.Path(__file__).parent.absolute()}/storage.json'
     secret_path = f'{pathlib.Path(__file__).parent.absolute()}/{config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"]}'
-    
+
+    print(f"Using credentials file: {secret_path}")
+    print(f"Storing tokens in: {creds_path}")
+
     store = file.Storage(creds_path)
     credentials = store.get()
-    
+
     if not credentials or credentials.invalid:
         flow = client.flow_from_clientsecrets(secret_path, 
             scope=['https://www.googleapis.com/auth/spreadsheets.readonly',
                    'https://www.googleapis.com/auth/drive.readonly'])
         
         credentials = tools.run_flow(flow, store, flags=tools.argparser.parse_known_args(["--noauth_local_webserver"])[0])
-    
-    with open(creds_path, "w") as creds_file:
-        creds_file.write(credentials.to_json())
 
     return creds_path
 
