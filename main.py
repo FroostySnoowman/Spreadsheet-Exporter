@@ -31,7 +31,8 @@ def get_credentials():
         flow = client.flow_from_clientsecrets(secret_path, 
             scope=['https://www.googleapis.com/auth/spreadsheets.readonly',
                    'https://www.googleapis.com/auth/drive.readonly'])
-        credentials = tools.run_flow(flow, store, args=tools.argparser.parse_args(args=['--noauth_local_webserver']))
+        
+        credentials = tools.run_flow(flow, store, flags=tools.argparser.parse_known_args(["--noauth_local_webserver"])[0])
     
     return credentials
 
