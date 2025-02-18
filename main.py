@@ -21,9 +21,9 @@ def load_config():
 config = load_config()
 
 def get_credentials():
-    creds_path = f'{pathlib.Path(__file__).parent.absolute()}/storage.json'
-    secret_path = f'{pathlib.Path(__file__).parent.absolute()}/{config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"]}'
-
+    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "storage.json")
+    secret_path = os.path.join(pathlib.Path(__file__).parent.absolute(), config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"])
+    
     print(f"Using credentials file: {secret_path}")
     print(f"Storing tokens in: {creds_path}")
 
@@ -38,6 +38,7 @@ def get_credentials():
         credentials = tools.run_flow(flow, store, flags=tools.argparser.parse_known_args(["--noauth_local_webserver"])[0])
 
     return creds_path
+
 
 async def export_spreadsheet():
     print("Exporting spreadsheet...")
