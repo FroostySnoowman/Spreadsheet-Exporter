@@ -5,6 +5,7 @@ import yaml
 from gsheets import Sheets
 from flask import Flask, send_file
 from threading import Thread
+from oauth2client import file, client, tools
 
 app = Flask(__name__)
 
@@ -19,9 +20,25 @@ def load_config():
 
 config = load_config()
 
+def get_credentials():
+    creds_path = f'{pathlib.Path(__file__).parent.absolute()}/storage.json'
+    secret_path = f'{pathlib.Path(__file__).parent.absolute()}/{config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"]}'
+    
+    store = file.Storage(creds_path)
+    credentials = store.get()
+    
+    if not credentials or credentials.invalid:
+        flow = client.flow_from_clientsecrets(secret_path, 
+            scope=['https://www.googleapis.com/auth/spreadsheets.readonly',
+                   'https://www.googleapis.com/auth/drive.readonly'])
+        credentials = tools.run_flow(flow, store, args=tools.argparser.parse_args(args=['--noauth_local_webserver']))
+    
+    return credentials
+
 async def export_spreadsheet():
     print("Exporting spreadsheet...")
-    sheets = Sheets.from_files(f'{pathlib.Path(__file__).parent.absolute()}/{config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"]}')
+    credentials = get_credentials()
+    sheets = Sheets.from_files(credentials)
     spreadsheet = sheets[config["Google"]["GOOGLE_SPREADSHEET_ID"]]
     sheet = spreadsheet.sheets[0]
 
