@@ -22,7 +22,7 @@ config = load_config()
 
 def get_credentials():
     # Path to the service account JSON file
-    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "service_account.json")
+    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "smooth-splicer-450816-m8-751c578388df.json")
     
     # Load credentials from the service account file
     credentials = service_account.Credentials.from_service_account_file(
