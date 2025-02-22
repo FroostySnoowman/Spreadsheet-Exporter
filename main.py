@@ -5,7 +5,7 @@ import yaml
 from gsheets import Sheets
 from flask import Flask, send_file
 from threading import Thread
-from oauth2client import file, client, tools
+from google.oauth2 import service_account
 
 app = Flask(__name__)
 
@@ -21,39 +21,33 @@ def load_config():
 config = load_config()
 
 def get_credentials():
-    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "storage.json")
-    secret_path = os.path.join(pathlib.Path(__file__).parent.absolute(), config["Google"]["GOOGLE_CLIENT_SECRET_FILE_NAME"])
+    # Path to the service account JSON file
+    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "service_account.json")
     
-    print(f"Using credentials file: {secret_path}")
-    print(f"Storing tokens in: {creds_path}")
-
-    store = file.Storage(creds_path)
-    credentials = store.get()
-
-    if not credentials or credentials.invalid:
-        print("No valid credentials found. Starting OAuth flow...")
-        flow = client.flow_from_clientsecrets(secret_path, 
-            scope=['https://www.googleapis.com/auth/spreadsheets.readonly',
-                   'https://www.googleapis.com/auth/drive.readonly'])
-        
-        # Use --noauth_local_webserver for headless environments
-        flags = tools.argparser.parse_args(["--noauth_local_webserver"])
-        credentials = tools.run_flow(flow, store, flags)
-        print("OAuth flow completed. Credentials stored.")
-
-    return creds_path
+    # Load credentials from the service account file
+    credentials = service_account.Credentials.from_service_account_file(
+        creds_path, scopes=['https://www.googleapis.com/auth/spreadsheets.readonly',
+                            'https://www.googleapis.com/auth/drive.readonly'])
+    return credentials
 
 async def export_spreadsheet():
     print("Exporting spreadsheet...")
-    creds_path = get_credentials()
-
-    sheets = Sheets.from_files(creds_path)
+    
+    # Get credentials
+    credentials = get_credentials()
+    
+    # Authenticate with the Sheets API using the service account credentials
+    sheets = Sheets.from_credentials(credentials)
+    
+    # Access the spreadsheet
     spreadsheet = sheets[config["Google"]["GOOGLE_SPREADSHEET_ID"]]
     sheet = spreadsheet.sheets[0]
 
+    # Convert the sheet to a DataFrame
     df = sheet.to_frame(header=None).reset_index(drop=True)
     df.columns = [str(i+1) for i in range(df.shape[1])]
 
+    # Determine export mode and file path
     export_mode = config["General"]["ExportMode"]
     file_path = None
 

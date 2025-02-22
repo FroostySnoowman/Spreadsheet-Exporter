@@ -1,5 +1,6 @@
 config.yml
 .DS_STORE
 client_secret*
+smooth-splicer*
 exported_column.txt
 old.py
