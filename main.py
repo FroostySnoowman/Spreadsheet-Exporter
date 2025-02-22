@@ -36,7 +36,9 @@ def get_credentials():
             scope=['https://www.googleapis.com/auth/spreadsheets.readonly',
                    'https://www.googleapis.com/auth/drive.readonly'])
         
-        credentials = tools.run_flow(flow, store, flags=tools.argparser.parse_known_args(["--noauth_local_webserver"])[0])
+        # Use --noauth_local_webserver for headless environments
+        flags = tools.argparser.parse_args(["--noauth_local_webserver"])
+        credentials = tools.run_flow(flow, store, flags)
         print("OAuth flow completed. Credentials stored.")
 
     return creds_path
