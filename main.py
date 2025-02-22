@@ -36,11 +36,11 @@ async def export_spreadsheet():
     # Get credentials
     credentials = get_credentials()
     
-    # Authenticate with the Sheets API using the service account credentials
-    sheets = Sheets.from_credentials(credentials)
+    # Initialize the Sheets API with the service account credentials
+    sheets = Sheets(credentials)
     
     # Access the spreadsheet
-    spreadsheet = sheets[config["Google"]["GOOGLE_SPREADSHEET_ID"]]
+    spreadsheet = sheets.get(config["Google"]["GOOGLE_SPREADSHEET_ID"])
     sheet = spreadsheet.sheets[0]
 
     # Convert the sheet to a DataFrame
