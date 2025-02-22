@@ -31,14 +31,15 @@ def get_credentials():
     credentials = store.get()
 
     if not credentials or credentials.invalid:
+        print("No valid credentials found. Starting OAuth flow...")
         flow = client.flow_from_clientsecrets(secret_path, 
             scope=['https://www.googleapis.com/auth/spreadsheets.readonly',
                    'https://www.googleapis.com/auth/drive.readonly'])
         
         credentials = tools.run_flow(flow, store, flags=tools.argparser.parse_known_args(["--noauth_local_webserver"])[0])
+        print("OAuth flow completed. Credentials stored.")
 
     return creds_path
-
 
 async def export_spreadsheet():
     print("Exporting spreadsheet...")
