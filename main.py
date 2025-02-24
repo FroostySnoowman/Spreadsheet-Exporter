@@ -1,7 +1,7 @@
-import os
 import asyncio
 import pathlib
 import yaml
+import os
 from gsheets import Sheets
 from flask import Flask, send_file
 from threading import Thread
@@ -21,33 +21,26 @@ def load_config():
 config = load_config()
 
 def get_credentials():
-    # Path to the service account JSON file
-    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "smooth-splicer-450816-m8-751c578388df.json")
+    creds_path = os.path.join(pathlib.Path(__file__).parent.absolute(), config["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"])
     
-    # Load credentials from the service account file
     credentials = service_account.Credentials.from_service_account_file(
-        creds_path, scopes=['https://www.googleapis.com/auth/spreadsheets.readonly',
-                            'https://www.googleapis.com/auth/drive.readonly'])
+        creds_path, scopes=['https://www.googleapis.com/auth/spreadsheets.readonly', 'https://www.googleapis.com/auth/drive.readonly'])
+    
     return credentials
 
 async def export_spreadsheet():
     print("Exporting spreadsheet...")
     
-    # Get credentials
     credentials = get_credentials()
     
-    # Initialize the Sheets API with the service account credentials
     sheets = Sheets(credentials)
     
-    # Access the spreadsheet
     spreadsheet = sheets.get(config["Google"]["GOOGLE_SPREADSHEET_ID"])
     sheet = spreadsheet.sheets[0]
 
-    # Convert the sheet to a DataFrame
     df = sheet.to_frame(header=None).reset_index(drop=True)
     df.columns = [str(i+1) for i in range(df.shape[1])]
 
-    # Determine export mode and file path
     export_mode = config["General"]["ExportMode"]
     file_path = None
 

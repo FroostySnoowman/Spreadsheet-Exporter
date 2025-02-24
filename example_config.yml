@@ -4,8 +4,8 @@ General:
     TXT_FILE_NAME: "exported_column.txt" # the output file
     ExportFormat: "csv" # csv or xlsx
     FILE_NAME: "exported_data.csv" # the output file
-    WEBSERVER_PORT: 5000
+    WEBSERVER_PORT: 5000 # port for the web server
 
 Google:
-    GOOGLE_CLIENT_SECRET_FILE_NAME: ""
-    GOOGLE_SPREADSHEET_ID: ""
+    GOOGLE_SERVICE_ACCOUNT_FILE: "service_account.json" # service account file
+    GOOGLE_SPREADSHEET_ID: "" # google spreadsheet id

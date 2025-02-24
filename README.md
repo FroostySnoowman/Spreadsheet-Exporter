@@ -9,19 +9,35 @@ The config is designed to be as user friendly as possible, allowing for everythi
 First, rename the `example_config.yml` file to `config.yml`.
 
 ```yml
-General:
-    FILE_NAME: ""
-```
-This is the file name of the file. This name will be displayed in dropbox. You must keep the same filename here as in `DROPBOX_FILE_PATH`.
-
-```yml
 Google:
-    GOOGLE_CLIENT_SECRET_FILE_NAME: ""
+    GOOGLE_SERVICE_ACCOUNT_FILE: ""
 ```
-Google requires a client secret FILE. This is the name of that file (filepath). To retrieve this, you need to go to https://console.cloud.google.com/welcome?organizationId=0. From here, click the dropdown towards the top left of your screen and choose "New Project" in the top right. Feel free to name this whatever you want. After it is created, make sure it is selected on the top left of your screen and choose "APIs & Services". Click on "ENABLE APIS AND SERVICES". Search for "Google Drive API", click on it, and enable it. You will also need to search for "Google Sheets API" and enable it. Now, you can go back to the Project Details and click on "Credentials". From here, click on "CREATE CREDENTIALS", "OAuth client ID", "CONFIGURE CONSENT SCREEN", "External", name it anything you want, add your gmail as the "User support email" and "Developer contact information" and click "SAVE AND CONTINUE". Click "ADD OR REMOVE SCOPES", click the box next to "API" and "UPDATE" and "SAVE AND CONTINUE". Click "ADD USERS" and add your gmail account there and "SAVE AND CONTINUE" and "BACK TO DASHBOARD". From here, go back to "Credentials" and click on "CREATE CREDENTIALS" and "OAuth client ID", choose "Desktop App" and name it whatever you want and "CREATE". Next, download the JSON file and put it in the same folder main.py is located and update the GOOGLE_CLIENT_SECRET_FILE_NAME with that file name, including .json (client_secret.json).
+0. To retrieve a service account file (authorization file), simply head to https://console.cloud.google.com/welcome?organizationId=0
+1. Select "Select a project" towards the top left of your screen and click "New Project".
+2. Give the project any name you want and no location.
+3. Wait until it's finished creating, then "Select Project".
+4. Go back to the "Welcome" (click the Google Cloud in top left corner) screen and click "APIs & Services*.
+5. Near the top middle of your screen, choose "Enable APIs and Services".
+6. Search/select the "Google Drive API" and "Google Sheets API".
+7. Head back to your project's home page (click the Google Cloud in top left corner).
+8. Select "IAM & Admin".
+9. Choose "Service Accounts" from the left navigation bar.
+10. Click "Create Service Account" near the top middle of your screen.
+11. Give your Service Account any name you want and the service account ID any name you want (I recommend just leaving it alone if your service is a unique name).
+12. Copy the service account ID email addres (mine for example is grwuyafhwa@fhwjafa.iam.gserviceaccount.com)
+13. Click "Create and Continue".
+14. Go to your google sheet at https://sheets.google.com/ and "Share" the sheet with that service account ID email address.
+15. Now, go back to the "Service Accounts" page and click the 3 dots "Actions" button.
+16. Choose "Manage keys".
+17. Click "Add Key" and "Create New Key".
+18. Make sure JSON is selected and "Create". This will download a necessary file.
+19. Upload that file to the bot and name it `service_account.json` (or whatever you put in your config.yml as `GOOGLE_SERVICE_ACCOUNT_FILE`).
 
 ```yml
 Google:
     GOOGLE_SPREADSHEET_ID: ""
 ```
 This step is much more simple. You need to simply get the ID to your spreadsheet which is found in the URL of that spreadsheet. Example URL: `https://docs.google.com/spreadsheets/d/1KU8TXn5QYtZnQxEBIzI41QygNKrehviEoBbmQ8dOFIs/edit#gid=0` Example ID: `1KU8TXn5QYtZnQxEBIzI41QygNKrehviEoBbmQ8dOFIs`.
+
+## Running The Script
+Run the script by doing `python3 main.py`. In console, you'll receive the webserver IP and port (http://XXX.XX.XXX.XX:5000). You can access the downloaded spreadsheet by going to http://XXX.XX.XXX.XX:5000/download.

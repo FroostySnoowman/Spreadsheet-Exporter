@@ -1,5 +1,5 @@
 config.yml
 .DS_STORE
-smooth-splicer*
+service_account.json
 exported_column.txt
 old.py
