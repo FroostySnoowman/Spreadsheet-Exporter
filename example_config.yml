@@ -1,11 +1,22 @@
 General:
-    ExportMode: "single_column" # single_column or full_spreadsheet
-    ColumnName: "1" # column name to be exported if ExportMode is single_column
-    TXT_FILE_NAME: "exported_column.txt" # the output file
-    ExportFormat: "csv" # csv or xlsx
-    FILE_NAME: "exported_data.csv" # the output file
-    WEBSERVER_PORT: 5000 # port for the web server
+    WEBSERVER_PORT: 5000 # Port for the web server
 
 Google:
-    GOOGLE_SERVICE_ACCOUNT_FILE: "service_account.json" # service account file
-    GOOGLE_SPREADSHEET_ID: "" # google spreadsheet id
+    GOOGLE_SERVICE_ACCOUNT_FILE: "service_account.json" # Service account file for Google API authentication
+
+Spreadsheets:
+    # Configuration for the first spreadsheet
+    - GOOGLE_SPREADSHEET_ID: "1BcOG7_wSiM73-wjIee8doPUA_Qm-o2yHrwWzkHHW0HU" # Google Spreadsheet ID
+      ExportMode: "single_column" # Export mode: single_column or full_spreadsheet
+      ColumnName: "1" # Column name to export if ExportMode is single_column
+      TXT_FILE_NAME: "exported_column_1.txt" # Output file name for single column export
+      ExportFormat: "csv" # Export format: csv or xlsx
+      FILE_NAME: "exported_data_1.csv" # Output file name for full spreadsheet export
+
+    # Configuration for the second spreadsheet
+    - GOOGLE_SPREADSHEET_ID: "2DcOG7_wSiM73-wjIee8doPUA_Qm-o2yHrwWzkHHW0HU" # Google Spreadsheet ID
+      ExportMode: "full_spreadsheet" # Export mode: single_column or full_spreadsheet
+      ColumnName: "" # Column name to export if ExportMode is single_column (leave empty if not applicable)
+      TXT_FILE_NAME: "exported_column_2.txt" # Output file name for single column export (leave unused if ExportMode is full_spreadsheet)
+      ExportFormat: "xlsx" # Export format: csv or xlsx
+      FILE_NAME: "exported_data_2.xlsx" # Output file name for full spreadsheet export
