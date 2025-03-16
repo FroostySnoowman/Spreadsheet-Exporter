@@ -88,24 +88,27 @@ async def initial_export():
 
 async def run_every_hour():
     while True:
-        for spreadsheet_config in config["Spreadsheets"]:
-            await export_spreadsheet(
-                spreadsheet_config["GOOGLE_SPREADSHEET_ID"],
-                spreadsheet_config["ExportMode"],
-                spreadsheet_config.get("ColumnName", ""),
-                spreadsheet_config["TXT_FILE_NAME"],
-                spreadsheet_config.get("ExportFormat", "csv"),
-                spreadsheet_config["FILE_NAME"]
-            )
-        await asyncio.sleep(3600)
+        try:
+            print("Running hourly export...")
+            for spreadsheet_config in config["Spreadsheets"]:
+                print(f"Exporting {spreadsheet_config['GOOGLE_SPREADSHEET_ID']}")
+                await export_spreadsheet(
+                    spreadsheet_config["GOOGLE_SPREADSHEET_ID"],
+                    spreadsheet_config["ExportMode"],
+                    spreadsheet_config.get("ColumnName", ""),
+                    spreadsheet_config["TXT_FILE_NAME"],
+                    spreadsheet_config.get("ExportFormat", "csv"),
+                    spreadsheet_config["FILE_NAME"]
+                )
+            print("Sleeping for 1 hour...")
+            await asyncio.sleep(3600)
+        except Exception as e:
+            print(f"Error in scheduled task: {e}")
 
 def start_asyncio_loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_every_hour())
+    asyncio.run(run_every_hour())
 
-thread = Thread(target=start_asyncio_loop)
-thread.daemon = True
+thread = Thread(target=start_asyncio_loop, daemon=True)
 thread.start()
 
 @app.route('/download/<filename>', methods=['GET'])
