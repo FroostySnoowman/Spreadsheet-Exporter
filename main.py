@@ -98,13 +98,18 @@ def login():
     u = User.query.filter_by(email=d["email"]).first()
     if not u or not bcrypt.check_password_hash(u.password_hash, d["password"]):
         return jsonify(success=False, message="Bad credentials"), 401
-    token = create_access_token(identity=u.id)
+    # force the 'sub' claim to be a string
+    token = create_access_token(identity=str(u.id))
     return jsonify(success=True, token=token, isAdmin=u.is_admin)
 
 @app.get("/api/me")
 @jwt_required()
 def me():
-    uid = get_jwt_identity()
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid identity"), 422
     u = User.query.get(uid)
     if u is None:
         return jsonify(message="User not found"), 404
@@ -113,7 +118,11 @@ def me():
 @app.post("/api/call")
 @jwt_required()
 def post_call():
-    uid = get_jwt_identity()
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid identity"), 422
     d   = request.get_json()
     db.session.add(CallLog(
         user_id       = uid,
@@ -129,7 +138,11 @@ def post_call():
 @app.get("/api/stats")
 @jwt_required()
 def stats():
-    uid   = get_jwt_identity()
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid identity"), 422
     start = request.args.get("start", type=int, default=0)
     end   = request.args.get("end",   type=int, default=2**63-1)
     calls = CallLog.query.filter(
@@ -146,11 +159,11 @@ def stats():
         noAnswer         = len(no_answer),
         noService        = len(no_service),
         noAnswerEntries  = [
-            {"number":c.number, "dateMillis":c.date_millis, "durationSecs":c.duration_secs}
+            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_secs}
             for c in no_answer
         ],
         noServiceEntries = [
-            {"number":c.number, "dateMillis":c.date_millis, "durationSecs":c.duration_secs}
+            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_secs}
             for c in no_service
         ]
     )
@@ -158,19 +171,28 @@ def stats():
 @app.get("/api/admin/users")
 @jwt_required()
 def list_users():
-    uid = get_jwt_identity()
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid identity"), 422
     cur = User.query.get(uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
     return jsonify([
-        {"id":u.id, "username":u.username, "email":u.email, "isAdmin":u.is_admin}
+        {"id":u.id,"username":u.username,"email":u.email,"isAdmin":u.is_admin}
         for u in User.query.all()
     ])
 
 @app.post("/api/admin/users/<int:uid>/promote")
 @jwt_required()
 def promote(uid):
-    cur = User.query.get(get_jwt_identity())
+    raw = get_jwt_identity()
+    try:
+        cur_id = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid identity"), 422
+    cur = User.query.get(cur_id)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
     tgt = User.query.get(uid)
@@ -183,7 +205,12 @@ def promote(uid):
 @app.post("/api/admin/users/<int:uid>/demote")
 @jwt_required()
 def demote(uid):
-    cur = User.query.get(get_jwt_identity())
+    raw = get_jwt_identity()
+    try:
+        cur_id = int(raw)
+    except (TypeError, ValueError):
+        return jsonify(message="Invalid identity"), 422
+    cur = User.query.get(cur_id)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
     tgt = User.query.get(uid)
@@ -235,9 +262,9 @@ Thread(target=lambda: asyncio.run(run_hourly()), daemon=True).start()
 
 @app.get("/download/<filename>")
 def download(filename):
-    path = pathlib.Path(__file__).parent / filename
-    if path.exists():
-        return send_file(str(path), as_attachment=True)
+    p = pathlib.Path(__file__).parent / filename
+    if p.exists():
+        return send_file(str(p), as_attachment=True)
     return "No file yet", 404
 
 if __name__ == "__main__":
