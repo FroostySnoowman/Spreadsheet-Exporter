@@ -182,27 +182,24 @@ def list_users():
     ])
 
 def get_credentials():
-    path = pathlib.Path(__file__).parent / cfg["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
+    creds_path = pathlib.Path(__file__).parent / cfg["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
-        str(path),
+        str(creds_path),
         scopes=[
-            "https://www.googleapis.com/auth/spreadsheets.readonly",
-            "https://www.googleapis.com/auth/drive.readonly"
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
         ]
     )
 
 def export_all_users_to_sheet():
-    creds       = get_credentials()
-    spreadsheet_id = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
-    # grab the first sheet’s name so we can target A1
-    spread = Sheets(creds).get(spreadsheet_id)
-    sheet_name = spread.sheets[0].title
+    creds           = get_credentials()
+    spreadsheet_id  = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
+    service         = build("sheets", "v4", credentials=creds)
+    # assume first sheet is where you want to dump everything
+    sheet_meta      = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_name      = sheet_meta["sheets"][0]["properties"]["title"]
 
-    # build the raw Sheets API client
-    service = build("sheets", "v4", credentials=creds)
-    values  = [
-        ["userId","username","email","number","dateMillis","durationSecs","type","presentation"]
-    ]
+    values = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
     for u in User.query.all():
         for c in u.calls:
             values.append([
@@ -215,14 +212,14 @@ def export_all_users_to_sheet():
                 str(c.type),
                 str(c.presentation)
             ])
+
     body = {"values": values}
-    service.spreadsheets().values()\
-        .update(
-            spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A1",
-            valueInputOption="RAW",
-            body=body
-        ).execute()
+    service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id,
+        range=f"{sheet_name}!A1",
+        valueInputOption="RAW",
+        body=body
+    ).execute()
 
 @app.post("/api/admin/export")
 @jwt_required()
