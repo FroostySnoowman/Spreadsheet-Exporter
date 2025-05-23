@@ -197,8 +197,8 @@ def export_call_logs():
         db.session.add(CallLog(
             user_id           = uid,
             number            = d["number"],
-            date_millis       = d["dateMillis"],
-            duration_seconds  = d["durationSecs"],
+            date_millis       = d["date_millis"],
+            duration_seconds  = d["duration_seconds"],
             type              = d["type"],
             presentation      = d["presentation"]
         ))
