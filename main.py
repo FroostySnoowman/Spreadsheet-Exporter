@@ -109,7 +109,7 @@ def me():
         uid = int(raw)
     except (TypeError, ValueError):
         return jsonify(message="Invalid identity"), 422
-    u = User.query.get(uid)
+    u = db.session.get(User, uid)
     if u is None:
         return jsonify(message="User not found"), 404
     return jsonify(id=u.id, username=u.username, email=u.email, isAdmin=u.is_admin)
@@ -175,7 +175,7 @@ def list_users():
         uid = int(raw)
     except (TypeError, ValueError):
         return jsonify(message="Invalid identity"), 422
-    cur = User.query.get(uid)
+    cur = db.session.get(User, uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
     return jsonify([
@@ -191,10 +191,10 @@ def promote(uid):
         cur_id = int(raw)
     except (TypeError, ValueError):
         return jsonify(message="Invalid identity"), 422
-    cur = User.query.get(cur_id)
+    cur = db.session.get(User, cur_id)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-    tgt = User.query.get(uid)
+    tgt = db.session.get(User, uid)
     if not tgt:
         return jsonify(success=False, message="User not found"), 404
     tgt.is_admin = True
@@ -209,10 +209,10 @@ def demote(uid):
         cur_id = int(raw)
     except (TypeError, ValueError):
         return jsonify(message="Invalid identity"), 422
-    cur = User.query.get(cur_id)
+    cur = db.session.get(User, cur_id)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-    tgt = User.query.get(uid)
+    tgt = db.session.get(User, uid)
     if not tgt:
         return jsonify(success=False, message="User not found"), 404
     tgt.is_admin = False
@@ -244,15 +244,16 @@ async def export_sheet(spreadsheet_id, mode, col, txt, fmt, out_name):
         elif fmt == "xlsx":
             df.to_excel(path, index=False)
 
-# -- new export-user functionality --
-
 def export_user_to_sheet(user: User):
     creds = get_credentials()
     ss = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
     title = f"user_{user.id}"
-    try:
-        ws = ss.sheets[title]
-    except KeyError:
+    ws = None
+    for sh in ss.sheets:
+        if getattr(sh, "title", None) == title:
+            ws = sh
+            break
+    if ws is None:
         ws = ss.sheets.add(title)
     rows = [["number","dateMillis","durationSecs","type","presentation"]]
     for c in user.calls:
@@ -277,7 +278,7 @@ def export_current_user():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-    u = User.query.get(uid)
+    u = db.session.get(User, uid)
     if not u:
         return jsonify(message="User not found"), 404
     export_user_to_sheet(u)
@@ -291,7 +292,7 @@ def admin_export_all():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-    cur = User.query.get(uid)
+    cur = db.session.get(User, uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
     export_all_users()

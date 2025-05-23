@@ -3,6 +3,7 @@ General:
 
 Google:
     GOOGLE_SERVICE_ACCOUNT_FILE: "service_account.json" # Service account file for Google API authentication
+    EXPORT_SPREADSHEET_ID: ""
 
 Spreadsheets:
     # Configuration for the first spreadsheet
