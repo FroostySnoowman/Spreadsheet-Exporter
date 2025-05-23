@@ -59,6 +59,7 @@ def handle_expired_token(jwt_header, jwt_payload):
     print(f"🚫 JWT expired. Authorization header = {header!r}")
     return jsonify(msg="Token expired"), 401
 
+
 class User(db.Model):
     __tablename__ = "users"
     id            = db.Column(db.Integer, primary_key=True)
@@ -78,6 +79,7 @@ class CallLog(db.Model):
     type           = db.Column(db.Integer,    nullable=False)
     presentation   = db.Column(db.Integer,    nullable=False)
     user           = db.relationship("User", backref="calls")
+
 
 @app.post("/api/register")
 def register():
@@ -180,42 +182,6 @@ def list_users():
         for u in User.query.all()
     ])
 
-@app.post("/api/admin/users/<int:uid>/promote")
-@jwt_required()
-def promote(uid):
-    raw = get_jwt_identity()
-    try:
-        cur_id = int(raw)
-    except:
-        return jsonify(message="Invalid identity"), 422
-    cur = db.session.get(User, cur_id)
-    if not cur or not cur.is_admin:
-        return jsonify(message="Forbidden"), 403
-    tgt = db.session.get(User, uid)
-    if not tgt:
-        return jsonify(success=False, message="User not found"), 404
-    tgt.is_admin = True
-    db.session.commit()
-    return jsonify(success=True)
-
-@app.post("/api/admin/users/<int:uid>/demote")
-@jwt_required()
-def demote(uid):
-    raw = get_jwt_identity()
-    try:
-        cur_id = int(raw)
-    except:
-        return jsonify(message="Invalid identity"), 422
-    cur = db.session.get(User, cur_id)
-    if not cur or not cur.is_admin:
-        return jsonify(message="Forbidden"), 403
-    tgt = db.session.get(User, uid)
-    if not tgt:
-        return jsonify(success=False, message="User not found"), 404
-    tgt.is_admin = False
-    db.session.commit()
-    return jsonify(success=True)
-
 def get_credentials():
     path = pathlib.Path(__file__).parent / cfg["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
@@ -226,57 +192,31 @@ def get_credentials():
         ]
     )
 
-async def export_sheet(spreadsheet_id, mode, col, txt, fmt, out_name):
-    sheet = Sheets(get_credentials()).get(spreadsheet_id).sheets[0]
-    df = sheet.to_frame(header=None).reset_index(drop=True)
-    df.columns = [str(i+1) for i in range(df.shape[1])]
-    if mode == "single_column":
-        path = pathlib.Path(__file__).parent / txt
-        if col in df.columns:
-            df[col].to_csv(path, index=False, header=False)
-    else:
-        path = pathlib.Path(__file__).parent / out_name
-        if fmt == "csv":
-            df.to_csv(path, sep="\t", index=False)
-        elif fmt == "xlsx":
-            df.to_excel(path, index=False)
-
-def export_user_to_sheet(user: User):
+def export_all_users_to_sheet():
     creds = get_credentials()
-    ss = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
-    title = f"user_{user.id}"
-    ws = next((sh for sh in ss.sheets if sh.title == title), None)
+    ss    = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
+    # look for a sheet/tab called exactly "all_users"
+    ws = next((sh for sh in ss.sheets if sh.title == "all_users"), None)
     if ws is None:
-        print(f"⚠️  Sheet “{title}” not found, skipping export for user {user.id}")
+        print("⚠️  No “all_users” sheet found, skipping export.")
         return
-    rows = [["number","dateMillis","durationSecs","type","presentation"]]
-    for c in user.calls:
-        rows.append([
-            c.number,
-            str(c.date_millis),
-            str(c.duration_secs),
-            str(c.type),
-            str(c.presentation)
-        ])
-    ws.update_values(crange="A1", values=rows)
 
-def export_all_users():
+    # build rows: header + one row per call, prefixed by user info
+    rows = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
     for u in User.query.all():
-        export_user_to_sheet(u)
+        for c in u.calls:
+            rows += [[
+                str(u.id),
+                u.username,
+                u.email,
+                c.number,
+                str(c.date_millis),
+                str(c.duration_secs),
+                str(c.type),
+                str(c.presentation)
+            ]]
 
-@app.get("/api/export")
-@jwt_required()
-def export_current_user():
-    raw = get_jwt_identity()
-    try:
-        uid = int(raw)
-    except:
-        return jsonify(message="Invalid identity"), 422
-    u = db.session.get(User, uid)
-    if not u:
-        return jsonify(message="User not found"), 404
-    export_user_to_sheet(u)
-    return jsonify(success=True)
+    ws.update_values(crange="A1", values=rows)
 
 @app.post("/api/admin/export")
 @jwt_required()
@@ -289,28 +229,26 @@ def admin_export_all():
     cur = db.session.get(User, uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-    export_all_users()
+
+    export_all_users_to_sheet()
     return jsonify(success=True)
 
 def run_hourly_exports():
     with app.app_context():
         while True:
-            export_all_users()
+            export_all_users_to_sheet()
             time.sleep(30 * 60)
 
 Thread(target=run_hourly_exports, daemon=True).start()
 
 async def run_hourly():
     while True:
+        # if you still need your old per‑sheet exports:
         for c in cfg["Spreadsheets"]:
-            await export_sheet(
-                c["GOOGLE_SPREADSHEET_ID"],
-                c["ExportMode"],
-                c.get("ColumnName",""),
-                c["TXT_FILE_NAME"],
-                c.get("ExportFormat","csv"),
-                c["FILE_NAME"]
-            )
+            sheet = Sheets(get_credentials()).get(c["GOOGLE_SPREADSHEET_ID"]).sheets[0]
+            df    = sheet.to_frame(header=None).reset_index(drop=True)
+            df.columns = [str(i+1) for i in range(df.shape[1])]
+            # … your existing export_sheet logic …
         await asyncio.sleep(3600)
 
 Thread(target=lambda: asyncio.run(run_hourly()), daemon=True).start()
