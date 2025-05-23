@@ -76,6 +76,18 @@ def login():
     token = create_access_token(identity=user.id)
     return jsonify(success=True, token=token, isAdmin=user.is_admin)
 
+@app.route('/api/me', methods=['GET'])
+@jwt_required()
+def me():
+    uid = get_jwt_identity()
+    user = User.query.get(uid)
+    return jsonify(
+      id=user.id,
+      username=user.username,
+      email=user.email,
+      isAdmin=user.is_admin
+    )
+
 @app.route('/api/call', methods=['POST'])
 @jwt_required()
 def post_call():
