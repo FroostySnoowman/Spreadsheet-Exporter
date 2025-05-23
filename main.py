@@ -59,7 +59,6 @@ def handle_expired_token(jwt_header, jwt_payload):
     print(f"🚫 JWT expired. Authorization header = {header!r}")
     return jsonify(msg="Token expired"), 401
 
-
 class User(db.Model):
     __tablename__ = "users"
     id            = db.Column(db.Integer, primary_key=True)
@@ -79,7 +78,6 @@ class CallLog(db.Model):
     type           = db.Column(db.Integer,    nullable=False)
     presentation   = db.Column(db.Integer,    nullable=False)
     user           = db.relationship("User", backref="calls")
-
 
 @app.post("/api/register")
 def register():
@@ -195,17 +193,11 @@ def get_credentials():
 def export_all_users_to_sheet():
     creds = get_credentials()
     ss    = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
-    # look for a sheet/tab called exactly "all_users"
-    ws = next((sh for sh in ss.sheets if sh.title == "all_users"), None)
-    if ws is None:
-        print("⚠️  No “all_users” sheet found, skipping export.")
-        return
-
-    # build rows: header + one row per call, prefixed by user info
-    rows = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
+    ws    = ss.sheets[0]
+    rows  = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
     for u in User.query.all():
         for c in u.calls:
-            rows += [[
+            rows.append([
                 str(u.id),
                 u.username,
                 u.email,
@@ -214,8 +206,8 @@ def export_all_users_to_sheet():
                 str(c.duration_secs),
                 str(c.type),
                 str(c.presentation)
-            ]]
-
+            ])
+    ws.clear()
     ws.update_values(crange="A1", values=rows)
 
 @app.post("/api/admin/export")
@@ -229,7 +221,6 @@ def admin_export_all():
     cur = db.session.get(User, uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-
     export_all_users_to_sheet()
     return jsonify(success=True)
 
@@ -241,24 +232,23 @@ def run_hourly_exports():
 
 Thread(target=run_hourly_exports, daemon=True).start()
 
-async def run_hourly():
+async def run_hourly_other():
     while True:
-        # if you still need your old per‑sheet exports:
         for c in cfg["Spreadsheets"]:
-            sheet = Sheets(get_credentials()).get(c["GOOGLE_SPREADSHEET_ID"]).sheets[0]
+            sheet = Sheets(get_credentials()) \
+                .get(c["GOOGLE_SPREADSHEET_ID"]) \
+                .sheets[0]
             df    = sheet.to_frame(header=None).reset_index(drop=True)
             df.columns = [str(i+1) for i in range(df.shape[1])]
-            # … your existing export_sheet logic …
+            # (your existing `single_column` / full‑sheet export logic could go here)
         await asyncio.sleep(3600)
 
-Thread(target=lambda: asyncio.run(run_hourly()), daemon=True).start()
+Thread(target=lambda: asyncio.run(run_hourly_other()), daemon=True).start()
 
 @app.get("/download/<filename>")
 def download(filename):
     p = pathlib.Path(__file__).parent / filename
-    if p.exists():
-        return send_file(str(p), as_attachment=True)
-    return "No file yet", 404
+    return send_file(str(p), as_attachment=True) if p.exists() else ("No file yet", 404)
 
 if __name__ == "__main__":
     with app.app_context():
