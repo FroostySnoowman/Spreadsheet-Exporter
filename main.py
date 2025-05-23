@@ -247,7 +247,8 @@ def export_user_to_sheet(user: User):
     title = f"user_{user.id}"
     ws = next((sh for sh in ss.sheets if sh.title == title), None)
     if ws is None:
-        ws = ss.create(title)
+        print(f"⚠️  Sheet “{title}” not found, skipping export for user {user.id}")
+        return
     rows = [["number","dateMillis","durationSecs","type","presentation"]]
     for c in user.calls:
         rows.append([
