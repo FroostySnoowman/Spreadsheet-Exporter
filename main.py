@@ -4,8 +4,6 @@ import pathlib
 import time
 import yaml
 from threading import Thread
-from googleapiclient.discovery import build
-
 from flask import Flask, jsonify, request, send_file
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
@@ -16,7 +14,7 @@ from flask_jwt_extended import (
     jwt_required
 )
 from flask_sqlalchemy import SQLAlchemy
-from gsheets import Sheets
+from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
 app = Flask(__name__)
@@ -42,6 +40,7 @@ db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 jwt    = JWTManager(app)
 
+
 @jwt.unauthorized_loader
 def handle_no_token(msg):
     header = request.headers.get("Authorization")
@@ -60,6 +59,7 @@ def handle_expired_token(jwt_header, jwt_payload):
     print(f"🚫 JWT expired. Authorization header = {header!r}")
     return jsonify(msg="Token expired"), 401
 
+
 class User(db.Model):
     __tablename__ = "users"
     id            = db.Column(db.Integer, primary_key=True)
@@ -69,16 +69,18 @@ class User(db.Model):
     is_admin      = db.Column(db.Boolean, default=False,    nullable=False)
     created_at    = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
+
 class CallLog(db.Model):
-    __tablename__  = "call_logs"
-    id             = db.Column(db.BigInteger, primary_key=True)
-    user_id        = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    number         = db.Column(db.String(32),  nullable=False)
-    date_millis    = db.Column(db.BigInteger, nullable=False)
-    duration_secs  = db.Column(db.BigInteger, nullable=False)
-    type           = db.Column(db.Integer,    nullable=False)
-    presentation   = db.Column(db.Integer,    nullable=False)
-    user           = db.relationship("User", backref="calls")
+    __tablename__      = "call_logs"
+    id                 = db.Column(db.BigInteger, primary_key=True)
+    user_id            = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    number             = db.Column(db.String(32),  nullable=False)
+    date_millis        = db.Column(db.BigInteger, nullable=False)
+    duration_seconds   = db.Column(db.BigInteger, nullable=False)
+    type               = db.Column(db.Integer,    nullable=False)
+    presentation       = db.Column(db.Integer,    nullable=False)
+    user               = db.relationship("User", backref="calls")
+
 
 @app.post("/api/register")
 def register():
@@ -122,12 +124,12 @@ def post_call():
         return jsonify(message="Invalid identity"), 422
     d = request.get_json()
     db.session.add(CallLog(
-        user_id       = uid,
-        number        = d["number"],
-        date_millis   = d["dateMillis"],
-        duration_secs = d["durationSecs"],
-        type          = d["type"],
-        presentation  = d["presentation"]
+        user_id           = uid,
+        number            = d["number"],
+        date_millis       = d["dateMillis"],
+        duration_seconds  = d["durationSecs"],
+        type              = d["type"],
+        presentation      = d["presentation"]
     ))
     db.session.commit()
     return jsonify(success=True)
@@ -147,7 +149,7 @@ def stats():
         CallLog.date_millis.between(start, end)
     ).all()
     total      = len(calls)
-    connected  = sum(c.duration_secs > 25 for c in calls)
+    connected  = sum(c.duration_seconds > 25 for c in calls)
     no_answer  = [c for c in calls if c.type == 3]
     no_service = [c for c in calls if c.presentation == 3]
     return jsonify(
@@ -156,11 +158,11 @@ def stats():
         noAnswer         = len(no_answer),
         noService        = len(no_service),
         noAnswerEntries  = [
-            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_secs}
+            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds}
             for c in no_answer
         ],
         noServiceEntries = [
-            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_secs}
+            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds}
             for c in no_service
         ]
     )
@@ -181,79 +183,28 @@ def list_users():
         for u in User.query.all()
     ])
 
-def get_credentials():
-    creds_path = pathlib.Path(__file__).parent / cfg["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
-    return service_account.Credentials.from_service_account_file(
-        str(creds_path),
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-    )
 
-def export_all_users_to_sheet():
-    creds           = get_credentials()
-    spreadsheet_id  = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
-    service         = build("sheets", "v4", credentials=creds)
-    sheet_meta      = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheet_name      = sheet_meta["sheets"][0]["properties"]["title"]
-    values = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
-    for u in User.query.all():
-        for c in u.calls:
-            values.append([
-                str(u.id),
-                u.username,
-                u.email,
-                c.number,
-                str(c.date_millis),
-                str(c.duration_secs),
-                str(c.type),
-                str(c.presentation)
-            ])
-    body = {"values": values}
-    service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=f"{sheet_name}!A1",
-        valueInputOption="RAW",
-        body=body
-    ).execute()
-
-@app.get("/api/export")
+@app.post("/api/export")
 @jwt_required()
-def export_current_user():
+def export_call_logs():
     raw = get_jwt_identity()
     try:
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-    u = db.session.get(User, uid)
-    if not u:
-        return jsonify(message="User not found"), 404
-    creds           = get_credentials()
-    spreadsheet_id  = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
-    service         = build("sheets", "v4", credentials=creds)
-    sheet_meta      = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheet_name      = sheet_meta["sheets"][0]["properties"]["title"]
-    values = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
-    for c in u.calls:
-        values.append([
-            str(u.id),
-            u.username,
-            u.email,
-            c.number,
-            str(c.date_millis),
-            str(c.duration_secs),
-            str(c.type),
-            str(c.presentation)
-        ])
-    body = {"values": values}
-    service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=f"{sheet_name}!A1",
-        valueInputOption="RAW",
-        body=body
-    ).execute()
+    payload = request.get_json() or []
+    for d in payload:
+        db.session.add(CallLog(
+            user_id           = uid,
+            number            = d["number"],
+            date_millis       = d["dateMillis"],
+            duration_seconds  = d["durationSecs"],
+            type              = d["type"],
+            presentation      = d["presentation"]
+        ))
+    db.session.commit()
     return jsonify(success=True)
+
 
 @app.post("/api/admin/export")
 @jwt_required()
@@ -266,21 +217,47 @@ def admin_export_all():
     cur = db.session.get(User, uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-    export_all_users_to_sheet()
+    # reuse same logic, but loop all users
+    for u in User.query.all():
+        for c in u.calls:
+            db.session.add(CallLog(
+                user_id           = u.id,
+                number            = c.number,
+                date_millis       = c.date_millis,
+                duration_seconds  = c.duration_seconds,
+                type              = c.type,
+                presentation      = c.presentation
+            ))
+    db.session.commit()
     return jsonify(success=True)
+
 
 def run_hourly_exports():
     with app.app_context():
         while True:
-            export_all_users_to_sheet()
+            # here you could pull from an external queue,
+            # but for now simply export all again
+            for u in User.query.all():
+                for c in u.calls:
+                    db.session.add(CallLog(
+                        user_id           = u.id,
+                        number            = c.number,
+                        date_millis       = c.date_millis,
+                        duration_seconds  = c.duration_seconds,
+                        type              = c.type,
+                        presentation      = c.presentation
+                    ))
+            db.session.commit()
             time.sleep(30 * 60)
 
 Thread(target=run_hourly_exports, daemon=True).start()
+
 
 @app.get("/download/<filename>")
 def download(filename):
     p = pathlib.Path(__file__).parent / filename
     return send_file(str(p), as_attachment=True) if p.exists() else ("No file yet", 404)
+
 
 if __name__ == "__main__":
     with app.app_context():
