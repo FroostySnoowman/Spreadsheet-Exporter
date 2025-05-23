@@ -195,10 +195,8 @@ def export_all_users_to_sheet():
     creds           = get_credentials()
     spreadsheet_id  = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
     service         = build("sheets", "v4", credentials=creds)
-    # assume first sheet is where you want to dump everything
     sheet_meta      = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
     sheet_name      = sheet_meta["sheets"][0]["properties"]["title"]
-
     values = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
     for u in User.query.all():
         for c in u.calls:
@@ -212,7 +210,6 @@ def export_all_users_to_sheet():
                 str(c.type),
                 str(c.presentation)
             ])
-
     body = {"values": values}
     service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
@@ -220,6 +217,43 @@ def export_all_users_to_sheet():
         valueInputOption="RAW",
         body=body
     ).execute()
+
+@app.get("/api/export")
+@jwt_required()
+def export_current_user():
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except:
+        return jsonify(message="Invalid identity"), 422
+    u = db.session.get(User, uid)
+    if not u:
+        return jsonify(message="User not found"), 404
+    creds           = get_credentials()
+    spreadsheet_id  = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
+    service         = build("sheets", "v4", credentials=creds)
+    sheet_meta      = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheet_name      = sheet_meta["sheets"][0]["properties"]["title"]
+    values = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
+    for c in u.calls:
+        values.append([
+            str(u.id),
+            u.username,
+            u.email,
+            c.number,
+            str(c.date_millis),
+            str(c.duration_secs),
+            str(c.type),
+            str(c.presentation)
+        ])
+    body = {"values": values}
+    service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id,
+        range=f"{sheet_name}!A1",
+        valueInputOption="RAW",
+        body=body
+    ).execute()
+    return jsonify(success=True)
 
 @app.post("/api/admin/export")
 @jwt_required()
@@ -242,19 +276,6 @@ def run_hourly_exports():
             time.sleep(30 * 60)
 
 Thread(target=run_hourly_exports, daemon=True).start()
-
-async def run_hourly_other():
-    while True:
-        for c in cfg["Spreadsheets"]:
-            sheet = Sheets(get_credentials()) \
-                .get(c["GOOGLE_SPREADSHEET_ID"]) \
-                .sheets[0]
-            df    = sheet.to_frame(header=None).reset_index(drop=True)
-            df.columns = [str(i+1) for i in range(df.shape[1])]
-            # (your existing `single_column` / full‑sheet export logic could go here)
-        await asyncio.sleep(3600)
-
-Thread(target=lambda: asyncio.run(run_hourly_other()), daemon=True).start()
 
 @app.get("/download/<filename>")
 def download(filename):
