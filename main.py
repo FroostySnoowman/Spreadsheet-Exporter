@@ -41,7 +41,6 @@ db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 jwt    = JWTManager(app)
 
-
 @jwt.unauthorized_loader
 def handle_no_token(msg):
     header = request.headers.get("Authorization")
@@ -59,7 +58,6 @@ def handle_expired_token(jwt_header, jwt_payload):
     header = request.headers.get("Authorization")
     print(f"🚫 JWT expired. Authorization header = {header!r}")
     return jsonify(msg="Token expired"), 401
-
 
 class User(db.Model):
     __tablename__ = "users"
@@ -80,7 +78,6 @@ class CallLog(db.Model):
     type           = db.Column(db.Integer,    nullable=False)
     presentation   = db.Column(db.Integer,    nullable=False)
     user           = db.relationship("User", backref="calls")
-
 
 @app.post("/api/register")
 def register():
@@ -107,7 +104,7 @@ def me():
     raw = get_jwt_identity()
     try:
         uid = int(raw)
-    except (TypeError, ValueError):
+    except:
         return jsonify(message="Invalid identity"), 422
     u = db.session.get(User, uid)
     if u is None:
@@ -248,9 +245,8 @@ def export_user_to_sheet(user: User):
     creds = get_credentials()
     ss = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
     title = f"user_{user.id}"
-    try:
-        ws = ss.sheets[title]
-    except KeyError:
+    ws = next((sh for sh in ss.sheets if sh.title == title), None)
+    if ws is None:
         ws = ss.create(title)
     rows = [["number","dateMillis","durationSecs","type","presentation"]]
     for c in user.calls:
