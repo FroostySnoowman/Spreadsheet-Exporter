@@ -9,48 +9,58 @@ from flask import Flask, jsonify, request, send_file
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from flask_jwt_extended import (
-    JWTManager, create_access_token, get_jwt_identity,
+    JWTManager,
+    create_access_token,
+    get_jwt_identity,
     jwt_required
 )
 from flask_sqlalchemy import SQLAlchemy
 from gsheets import Sheets
 from google.oauth2 import service_account
 
-# ──────────────────────────  basic app / cfg  ──────────────────────────
 app = Flask(__name__)
 CORS(app)
 
 def load_config():
-    p = f'{pathlib.Path(__file__).parent}/config.yml'
+    p = pathlib.Path(__file__).parent / "config.yml"
     with open(p, "r") as fh:
         return yaml.safe_load(fh)
 
 cfg = load_config()
 
 db_cfg = cfg["Database"]
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"mysql+pymysql://{db_cfg['USER']}:{db_cfg['PASSWORD']}@{db_cfg['HOST']}/{db_cfg['NAME']}"
+app.config["SQLALCHEMY_DATABASE_URI"]        = (
+    f"mysql+pymysql://{db_cfg['USER']}:{db_cfg['PASSWORD']}@"
+    f"{db_cfg['HOST']}/{db_cfg['NAME']}"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["JWT_SECRET_KEY"]            = cfg["General"]["JWT_SECRET_KEY"]
-app.config["JWT_ACCESS_TOKEN_EXPIRES"]  = False     # never expire
+app.config["JWT_SECRET_KEY"]                 = cfg["General"]["JWT_SECRET_KEY"]
+app.config["JWT_ACCESS_TOKEN_EXPIRES"]       = False
 
 db     = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 jwt    = JWTManager(app)
 
-# ──────────────────────────  debug helpers  ────────────────────────────
+
 @jwt.unauthorized_loader
-def _unauth(msg):
-    print("🚫 JWT missing. Header →", request.headers.get("Authorization"))
+def handle_no_token(msg):
+    header = request.headers.get("Authorization")
+    print(f"🚫 JWT missing. Authorization header = {header!r}")
     return jsonify(msg=msg), 422
 
 @jwt.invalid_token_loader
-def _invalid(msg):
-    print("🚫 JWT invalid. Header →", request.headers.get("Authorization"))
+def handle_invalid_token(msg):
+    header = request.headers.get("Authorization")
+    print(f"🚫 JWT invalid ({msg}). Authorization header = {header!r}")
     return jsonify(msg=msg), 422
 
-# ──────────────────────────  models  ────────────────────────────────────
+@jwt.expired_token_loader
+def handle_expired_token(jwt_header, jwt_payload):
+    header = request.headers.get("Authorization")
+    print(f"🚫 JWT expired. Authorization header = {header!r}")
+    return jsonify(msg="Token expired"), 401
+
+
 class User(db.Model):
     __tablename__ = "users"
     id            = db.Column(db.Integer, primary_key=True)
@@ -71,11 +81,11 @@ class CallLog(db.Model):
     presentation   = db.Column(db.Integer,    nullable=False)
     user           = db.relationship("User", backref="calls")
 
-# ──────────────────────────  auth routes  ───────────────────────────────
+
 @app.post("/api/register")
 def register():
     d = request.get_json()
-    if User.query.filter((User.username == d["username"]) | (User.email == d["email"])).first():
+    if User.query.filter((User.username==d["username"]) | (User.email==d["email"])).first():
         return jsonify(success=False, message="User/email exists"), 400
     pw = bcrypt.generate_password_hash(d["password"]).decode()
     db.session.add(User(username=d["username"], email=d["email"], password_hash=pw))
@@ -94,12 +104,12 @@ def login():
 @app.get("/api/me")
 @jwt_required()
 def me():
-    u = User.query.get(get_jwt_identity())
+    uid = get_jwt_identity()
+    u = User.query.get(uid)
     if u is None:
         return jsonify(message="User not found"), 404
     return jsonify(id=u.id, username=u.username, email=u.email, isAdmin=u.is_admin)
 
-# ──────────────────────────  call-log routes  ───────────────────────────
 @app.post("/api/call")
 @jwt_required()
 def post_call():
@@ -135,19 +145,25 @@ def stats():
         connected        = connected,
         noAnswer         = len(no_answer),
         noService        = len(no_service),
-        noAnswerEntries  = [{"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_secs} for c in no_answer],
-        noServiceEntries = [{"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_secs} for c in no_service]
+        noAnswerEntries  = [
+            {"number":c.number, "dateMillis":c.date_millis, "durationSecs":c.duration_secs}
+            for c in no_answer
+        ],
+        noServiceEntries = [
+            {"number":c.number, "dateMillis":c.date_millis, "durationSecs":c.duration_secs}
+            for c in no_service
+        ]
     )
 
-# ──────────────────────────  admin routes  ──────────────────────────────
 @app.get("/api/admin/users")
 @jwt_required()
 def list_users():
-    cur = User.query.get(get_jwt_identity())
+    uid = get_jwt_identity()
+    cur = User.query.get(uid)
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
     return jsonify([
-        {"id":u.id,"username":u.username,"email":u.email,"isAdmin":u.is_admin}
+        {"id":u.id, "username":u.username, "email":u.email, "isAdmin":u.is_admin}
         for u in User.query.all()
     ])
 
@@ -157,8 +173,9 @@ def promote(uid):
     cur = User.query.get(get_jwt_identity())
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-    tgt = User.query.get(uid) or (lambda: (jsonify(success=False, message="User not found"), 404))()
-    if isinstance(tgt, tuple): return tgt
+    tgt = User.query.get(uid)
+    if not tgt:
+        return jsonify(success=False, message="User not found"), 404
     tgt.is_admin = True
     db.session.commit()
     return jsonify(success=True)
@@ -169,17 +186,17 @@ def demote(uid):
     cur = User.query.get(get_jwt_identity())
     if not cur or not cur.is_admin:
         return jsonify(message="Forbidden"), 403
-    tgt = User.query.get(uid) or (lambda: (jsonify(success=False, message="User not found"), 404))()
-    if isinstance(tgt, tuple): return tgt
+    tgt = User.query.get(uid)
+    if not tgt:
+        return jsonify(success=False, message="User not found"), 404
     tgt.is_admin = False
     db.session.commit()
     return jsonify(success=True)
 
-# ──────────────────────────  spreadsheet export  ───────────────────────
-def creds():
-    path = os.path.join(pathlib.Path(__file__).parent, cfg["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"])
+def get_credentials():
+    path = pathlib.Path(__file__).parent / cfg["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
-        path,
+        str(path),
         scopes=[
             "https://www.googleapis.com/auth/spreadsheets.readonly",
             "https://www.googleapis.com/auth/drive.readonly"
@@ -187,21 +204,19 @@ def creds():
     )
 
 async def export_sheet(spreadsheet_id, mode, col, txt, fmt, out_name):
-    sheet = Sheets(creds()).get(spreadsheet_id).sheets[0]
+    sheet = Sheets(get_credentials()).get(spreadsheet_id).sheets[0]
     df = sheet.to_frame(header=None).reset_index(drop=True)
     df.columns = [str(i+1) for i in range(df.shape[1])]
-
     if mode == "single_column":
-        path = f"{pathlib.Path(__file__).parent}/{txt}"
+        path = pathlib.Path(__file__).parent / txt
         if col in df.columns:
-            df[col].astype(str).to_csv(path, index=False, header=False)
+            df[col].to_csv(path, index=False, header=False)
     else:
-        path = f"{pathlib.Path(__file__).parent}/{out_name}"
+        path = pathlib.Path(__file__).parent / out_name
         if fmt == "csv":
             df.to_csv(path, sep="\t", index=False)
         elif fmt == "xlsx":
             df.to_excel(path, index=False)
-    return
 
 async def run_hourly():
     while True:
@@ -209,20 +224,21 @@ async def run_hourly():
             await export_sheet(
                 c["GOOGLE_SPREADSHEET_ID"],
                 c["ExportMode"],
-                c.get("ColumnName", ""),
+                c.get("ColumnName",""),
                 c["TXT_FILE_NAME"],
-                c.get("ExportFormat", "csv"),
+                c.get("ExportFormat","csv"),
                 c["FILE_NAME"]
             )
         await asyncio.sleep(3600)
 
 Thread(target=lambda: asyncio.run(run_hourly()), daemon=True).start()
 
-# ──────────────────────────  misc  ──────────────────────────────────────
 @app.get("/download/<filename>")
 def download(filename):
-    p = f"{pathlib.Path(__file__).parent}/{filename}"
-    return send_file(p, as_attachment=True) if os.path.exists(p) else ("No file yet", 404)
+    path = pathlib.Path(__file__).parent / filename
+    if path.exists():
+        return send_file(str(path), as_attachment=True)
+    return "No file yet", 404
 
 if __name__ == "__main__":
     with app.app_context():
