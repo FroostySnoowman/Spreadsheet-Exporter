@@ -32,6 +32,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = config["General"]["JWT_SECRET_KEY"]
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
@@ -81,11 +82,13 @@ def login():
 def me():
     uid = get_jwt_identity()
     user = User.query.get(uid)
+    if user is None:
+        return jsonify(message="User not found"), 404
     return jsonify(
-      id=user.id,
-      username=user.username,
-      email=user.email,
-      isAdmin=user.is_admin
+        id      = user.id,
+        username= user.username,
+        email   = user.email,
+        isAdmin = user.is_admin
     )
 
 @app.route('/api/call', methods=['POST'])
