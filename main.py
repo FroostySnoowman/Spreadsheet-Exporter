@@ -1,7 +1,7 @@
 import asyncio
 import datetime
-import os
 import pathlib
+import time
 import yaml
 from threading import Thread
 
@@ -98,7 +98,6 @@ def login():
     u = User.query.filter_by(email=d["email"]).first()
     if not u or not bcrypt.check_password_hash(u.password_hash, d["password"]):
         return jsonify(success=False, message="Bad credentials"), 401
-    # force the 'sub' claim to be a string
     token = create_access_token(identity=str(u.id))
     return jsonify(success=True, token=token, isAdmin=u.is_admin)
 
@@ -244,6 +243,66 @@ async def export_sheet(spreadsheet_id, mode, col, txt, fmt, out_name):
             df.to_csv(path, sep="\t", index=False)
         elif fmt == "xlsx":
             df.to_excel(path, index=False)
+
+# -- new export-user functionality --
+
+def export_user_to_sheet(user: User):
+    creds = get_credentials()
+    ss = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
+    title = f"user_{user.id}"
+    try:
+        ws = ss.sheets[title]
+    except KeyError:
+        ws = ss.sheets.add(title)
+    rows = [["number","dateMillis","durationSecs","type","presentation"]]
+    for c in user.calls:
+        rows.append([
+            c.number,
+            str(c.date_millis),
+            str(c.duration_secs),
+            str(c.type),
+            str(c.presentation)
+        ])
+    ws.update_values(crange="A1", values=rows)
+
+def export_all_users():
+    for u in User.query.all():
+        export_user_to_sheet(u)
+
+@app.get("/api/export")
+@jwt_required()
+def export_current_user():
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except:
+        return jsonify(message="Invalid identity"), 422
+    u = User.query.get(uid)
+    if not u:
+        return jsonify(message="User not found"), 404
+    export_user_to_sheet(u)
+    return jsonify(success=True)
+
+@app.post("/api/admin/export")
+@jwt_required()
+def admin_export_all():
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except:
+        return jsonify(message="Invalid identity"), 422
+    cur = User.query.get(uid)
+    if not cur or not cur.is_admin:
+        return jsonify(message="Forbidden"), 403
+    export_all_users()
+    return jsonify(success=True)
+
+def run_hourly_exports():
+    while True:
+        export_all_users()
+        time.sleep(30 * 60)
+
+Thread(target=run_hourly_exports, daemon=True).start()
 
 async def run_hourly():
     while True:
