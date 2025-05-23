@@ -207,7 +207,6 @@ def export_all_users_to_sheet():
                 str(c.type),
                 str(c.presentation)
             ])
-    ws.clear()
     ws.update_values(crange="A1", values=rows)
 
 @app.post("/api/admin/export")
