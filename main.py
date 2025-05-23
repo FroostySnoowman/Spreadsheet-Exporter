@@ -85,7 +85,7 @@ class CallLog(db.Model):
 @app.post("/api/register")
 def register():
     d = request.get_json()
-    if User.query.filter((User.username==d["username"]) | (User.email==d["email"])).first():
+    if User.query.filter((User.username==d["username"])|(User.email==d["email"])).first():
         return jsonify(success=False, message="User/email exists"), 400
     pw = bcrypt.generate_password_hash(d["password"]).decode()
     db.session.add(User(username=d["username"], email=d["email"], password_hash=pw))
@@ -120,9 +120,9 @@ def post_call():
     raw = get_jwt_identity()
     try:
         uid = int(raw)
-    except (TypeError, ValueError):
+    except:
         return jsonify(message="Invalid identity"), 422
-    d   = request.get_json()
+    d = request.get_json()
     db.session.add(CallLog(
         user_id       = uid,
         number        = d["number"],
@@ -140,7 +140,7 @@ def stats():
     raw = get_jwt_identity()
     try:
         uid = int(raw)
-    except (TypeError, ValueError):
+    except:
         return jsonify(message="Invalid identity"), 422
     start = request.args.get("start", type=int, default=0)
     end   = request.args.get("end",   type=int, default=2**63-1)
@@ -173,7 +173,7 @@ def list_users():
     raw = get_jwt_identity()
     try:
         uid = int(raw)
-    except (TypeError, ValueError):
+    except:
         return jsonify(message="Invalid identity"), 422
     cur = db.session.get(User, uid)
     if not cur or not cur.is_admin:
@@ -189,7 +189,7 @@ def promote(uid):
     raw = get_jwt_identity()
     try:
         cur_id = int(raw)
-    except (TypeError, ValueError):
+    except:
         return jsonify(message="Invalid identity"), 422
     cur = db.session.get(User, cur_id)
     if not cur or not cur.is_admin:
@@ -207,7 +207,7 @@ def demote(uid):
     raw = get_jwt_identity()
     try:
         cur_id = int(raw)
-    except (TypeError, ValueError):
+    except:
         return jsonify(message="Invalid identity"), 422
     cur = db.session.get(User, cur_id)
     if not cur or not cur.is_admin:
@@ -248,13 +248,10 @@ def export_user_to_sheet(user: User):
     creds = get_credentials()
     ss = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
     title = f"user_{user.id}"
-    ws = None
-    for sh in ss.sheets:
-        if getattr(sh, "title", None) == title:
-            ws = sh
-            break
-    if ws is None:
-        ws = ss.sheets.add(title)
+    try:
+        ws = ss.sheets[title]
+    except KeyError:
+        ws = ss.create(title)
     rows = [["number","dateMillis","durationSecs","type","presentation"]]
     for c in user.calls:
         rows.append([
@@ -299,9 +296,10 @@ def admin_export_all():
     return jsonify(success=True)
 
 def run_hourly_exports():
-    while True:
-        export_all_users()
-        time.sleep(30 * 60)
+    with app.app_context():
+        while True:
+            export_all_users()
+            time.sleep(30 * 60)
 
 Thread(target=run_hourly_exports, daemon=True).start()
 
