@@ -4,6 +4,7 @@ import pathlib
 import time
 import yaml
 from threading import Thread
+from googleapiclient.discovery import build
 
 from flask import Flask, jsonify, request, send_file
 from flask_bcrypt import Bcrypt
@@ -191,13 +192,20 @@ def get_credentials():
     )
 
 def export_all_users_to_sheet():
-    creds = get_credentials()
-    ss    = Sheets(creds).get(cfg["Google"]["EXPORT_SPREADSHEET_ID"])
-    ws    = ss.sheets[0]
-    rows  = [["userId","username","email","number","dateMillis","durationSecs","type","presentation"]]
+    creds       = get_credentials()
+    spreadsheet_id = cfg["Google"]["EXPORT_SPREADSHEET_ID"]
+    # grab the first sheet’s name so we can target A1
+    spread = Sheets(creds).get(spreadsheet_id)
+    sheet_name = spread.sheets[0].title
+
+    # build the raw Sheets API client
+    service = build("sheets", "v4", credentials=creds)
+    values  = [
+        ["userId","username","email","number","dateMillis","durationSecs","type","presentation"]
+    ]
     for u in User.query.all():
         for c in u.calls:
-            rows.append([
+            values.append([
                 str(u.id),
                 u.username,
                 u.email,
@@ -207,7 +215,14 @@ def export_all_users_to_sheet():
                 str(c.type),
                 str(c.presentation)
             ])
-    ws.update_values(crange="A1", values=rows)
+    body = {"values": values}
+    service.spreadsheets().values()\
+        .update(
+            spreadsheetId=spreadsheet_id,
+            range=f"{sheet_name}!A1",
+            valueInputOption="RAW",
+            body=body
+        ).execute()
 
 @app.post("/api/admin/export")
 @jwt_required()
