@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import pathlib
-import time
 import yaml
 from threading import Thread
 from flask import Flask, jsonify, request, send_file
@@ -63,14 +62,14 @@ class User(db.Model):
 class CallLog(db.Model):
     __tablename__ = "call_logs"
     __table_args__ = (db.UniqueConstraint("user_id", "date_millis", "number", name="uq_user_date_number"),)
-    id               = db.Column(db.BigInteger, primary_key=True)
-    user_id          = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    number           = db.Column(db.String(32), nullable=False)
-    date_millis      = db.Column(db.BigInteger, nullable=False)
+    id = db.Column(db.BigInteger, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    number = db.Column(db.String(32), nullable=False)
+    date_millis = db.Column(db.BigInteger, nullable=False)
     duration_seconds = db.Column(db.BigInteger, nullable=False)
-    type             = db.Column(db.Integer, nullable=False)
-    presentation     = db.Column(db.Integer, nullable=False)
-    user             = db.relationship("User", backref="calls")
+    type = db.Column(db.Integer, nullable=False)
+    presentation = db.Column(db.Integer, nullable=False)
+    user = db.relationship("User", backref="calls")
 
 @app.post("/api/register")
 def register():
@@ -100,7 +99,7 @@ def me():
     except:
         return jsonify(message="Invalid identity"), 422
     u = db.session.get(User, uid)
-    if u is None:
+    if not u:
         return jsonify(message="User not found"), 404
     return jsonify(id=u.id, username=u.username, email=u.email, isAdmin=u.is_admin)
 
@@ -114,14 +113,14 @@ def post_call():
         return jsonify(message="Invalid identity"), 422
     d = request.get_json() or {}
     date_millis = d.get("dateMillis", d.get("date_millis"))
-    duration_seconds = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
+    duration = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
     db.session.add(CallLog(
         user_id=uid,
-        number=d.get("number", ""),
+        number=d.get("number",""),
         date_millis=date_millis or 0,
-        duration_seconds=duration_seconds or 0,
-        type=d.get("type", 0),
-        presentation=d.get("presentation", 0)
+        duration_seconds=duration or 0,
+        type=d.get("type",0),
+        presentation=d.get("presentation",0)
     ))
     db.session.commit()
     return jsonify(success=True)
@@ -139,8 +138,8 @@ def stats():
     calls = CallLog.query.filter(CallLog.user_id==uid, CallLog.date_millis.between(start, end)).all()
     total = len(calls)
     connected = sum(c.duration_seconds > 25 for c in calls)
-    no_answer = [c for c in calls if c.type == 3]
-    no_service = [c for c in calls if c.presentation == 3]
+    no_answer = [c for c in calls if c.type==3]
+    no_service = [c for c in calls if c.presentation==3]
     return jsonify(
         total=total,
         connected=connected,
@@ -158,10 +157,46 @@ def list_users():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-    cur = db.session.get(User, uid)
-    if not cur or not cur.is_admin:
+    admin = db.session.get(User, uid)
+    if not admin or not admin.is_admin:
         return jsonify(message="Forbidden"), 403
     return jsonify([{"id":u.id,"username":u.username,"email":u.email,"isAdmin":u.is_admin} for u in User.query.all()])
+
+@app.post("/api/admin/users/<int:id>/promote")
+@jwt_required()
+def promote_user(id):
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except:
+        return jsonify(message="Invalid identity"), 422
+    admin = db.session.get(User, uid)
+    if not admin or not admin.is_admin:
+        return jsonify(message="Forbidden"), 403
+    user = db.session.get(User, id)
+    if not user:
+        return jsonify(message="User not found"), 404
+    user.is_admin = True
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.post("/api/admin/users/<int:id>/demote")
+@jwt_required()
+def demote_user(id):
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except:
+        return jsonify(message="Invalid identity"), 422
+    admin = db.session.get(User, uid)
+    if not admin or not admin.is_admin:
+        return jsonify(message="Forbidden"), 403
+    user = db.session.get(User, id)
+    if not user:
+        return jsonify(message="User not found"), 404
+    user.is_admin = False
+    db.session.commit()
+    return jsonify(success=True)
 
 @app.post("/api/export")
 @jwt_required()
@@ -174,10 +209,10 @@ def export_call_logs():
     payload = request.get_json() or []
     for d in payload:
         date_millis = d.get("dateMillis", d.get("date_millis"))
-        duration   = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
-        number     = d.get("number", "")
-        ctype      = d.get("type", 0)
-        pres       = d.get("presentation", 0)
+        duration = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
+        number = d.get("number","")
+        ctype = d.get("type",0)
+        pres = d.get("presentation",0)
         if date_millis is None or duration is None:
             continue
         exists = CallLog.query.filter_by(user_id=uid, date_millis=date_millis, number=number).first()
@@ -202,8 +237,8 @@ def admin_export_all():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-    cur = db.session.get(User, uid)
-    if not cur or not cur.is_admin:
+    admin = db.session.get(User, uid)
+    if not admin or not admin.is_admin:
         return jsonify(message="Forbidden"), 403
     for u in User.query.all():
         for c in u.calls:
@@ -222,7 +257,7 @@ def get_credentials():
     creds_path = pathlib.Path(__file__).parent / config["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
         str(creds_path),
-        scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        scopes=['https://www.googleapis.com/auth/spreadsheets','https://www.googleapis.com/auth/drive']
     )
 
 async def export_spreadsheet(spreadsheet_id, export_mode, column_name, txt_file_name, export_format, file_name):
@@ -232,18 +267,18 @@ async def export_spreadsheet(spreadsheet_id, export_mode, column_name, txt_file_
     sheet = spreadsheet.sheets[0]
     df = sheet.to_frame(header=None).reset_index(drop=True)
     df.columns = [str(i+1) for i in range(df.shape[1])]
-    if export_mode == "single_column":
-        file_path = str(pathlib.Path(__file__).parent / txt_file_name)
+    if export_mode=="single_column":
+        file_path=str(pathlib.Path(__file__).parent/ txt_file_name)
         if column_name in df.columns:
-            df[column_name].astype(str).to_csv(file_path, index=False, header=False)
+            df[column_name].astype(str).to_csv(file_path,index=False,header=False)
         else:
             return None
     else:
-        file_path = str(pathlib.Path(__file__).parent / file_name)
-        if export_format == "csv":
-            df.to_csv(file_path, sep='\t', index=False)
-        elif export_format == "xlsx":
-            df.to_excel(file_path, index=False)
+        file_path=str(pathlib.Path(__file__).parent/ file_name)
+        if export_format=="csv":
+            df.to_csv(file_path,sep='\t',index=False)
+        elif export_format=="xlsx":
+            df.to_excel(file_path,index=False)
         else:
             return None
     return file_path
@@ -251,7 +286,7 @@ async def export_spreadsheet(spreadsheet_id, export_mode, column_name, txt_file_
 async def run_every_hour():
     with app.app_context():
         creds = get_credentials()
-        sheets_api = build('sheets', 'v4', credentials=creds).spreadsheets()
+        sheets_api = build('sheets','v4',credentials=creds).spreadsheets()
         while True:
             for sc in config["Spreadsheets"]:
                 await export_spreadsheet(
@@ -264,7 +299,7 @@ async def run_every_hour():
                 )
             try:
                 target = config["Google"]["EXPORT_SPREADSHEET_ID"]
-                rows = []
+                rows=[]
                 for c in db.session.query(CallLog).order_by(CallLog.date_millis).all():
                     rows.append([
                         str(c.user_id),
@@ -274,28 +309,28 @@ async def run_every_hour():
                         str(c.type),
                         str(c.presentation)
                     ])
-                sheets_api.values().clear(spreadsheetId=target, range="Sheet1").execute()
+                sheets_api.values().clear(spreadsheetId=target,range="Sheet1").execute()
                 sheets_api.values().update(
                     spreadsheetId=target,
                     range="Sheet1!A1",
                     valueInputOption="RAW",
-                    body={"values": rows}
+                    body={"values":rows}
                 ).execute()
             except Exception as e:
-                print("Error pushing DB to sheet:", e)
+                print("Error pushing DB to sheet:",e)
             await asyncio.sleep(3600)
 
 def start_asyncio_loop():
     asyncio.run(run_every_hour())
 
-Thread(target=start_asyncio_loop, daemon=True).start()
+Thread(target=start_asyncio_loop,daemon=True).start()
 
-@app.route('/download/<filename>', methods=['GET'])
+@app.route('/download/<filename>',methods=['GET'])
 def download(filename):
-    p = pathlib.Path(__file__).parent / filename
-    return send_file(str(p), as_attachment=True) if p.exists() else ("No file yet", 404)
+    p=pathlib.Path(__file__).parent/filename
+    return send_file(str(p),as_attachment=True) if p.exists() else ("No file yet",404)
 
-if __name__ == "__main__":
+if __name__=="__main__":
     with app.app_context():
         db.create_all()
-    app.run(host="0.0.0.0", port=config["General"]["WEBSERVER_PORT"], threaded=True)
+    app.run(host="0.0.0.0",port=config["General"]["WEBSERVER_PORT"], threaded=True)
