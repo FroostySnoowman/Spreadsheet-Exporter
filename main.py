@@ -254,7 +254,7 @@ def run_hourly_exports_db():
 Thread(target=run_hourly_exports_db, daemon=True).start()
 
 def get_credentials():
-    creds_path = pathlib.Path(__file__).parent / config["General"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
+    creds_path = pathlib.Path(__file__).parent / config["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
         str(creds_path),
         scopes=['https://www.googleapis.com/auth/spreadsheets.readonly','https://www.googleapis.com/auth/drive.readonly']
