@@ -1,9 +1,16 @@
 General:
     WEBSERVER_PORT: 5000 # Port for the web server
+    JWT_SECRET_KEY: "replace-with-a-strong-secret"
 
 Google:
     GOOGLE_SERVICE_ACCOUNT_FILE: "service_account.json" # Service account file for Google API authentication
     EXPORT_SPREADSHEET_ID: ""
+
+Database:
+    HOST: ""
+    USER: ""
+    PASSWORD: ""
+    NAME: ""
 
 Spreadsheets:
     # Configuration for the first spreadsheet
