@@ -297,7 +297,7 @@ async def run_every_hour():
                 sc["FILE_NAME"]
             )
         try:
-            target = config["General"]["EXPORT_SPREADSHEET_ID"]
+            target = config["Google"]["EXPORT_SPREADSHEET_ID"]
             rows = []
             for c in db.session.query(CallLog).order_by(CallLog.date_millis).all():
                 rows.append([
