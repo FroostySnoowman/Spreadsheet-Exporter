@@ -12,6 +12,7 @@ from flask_sqlalchemy import SQLAlchemy
 from gsheets import Sheets
 from sqlalchemy.exc import OperationalError
 from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 app = Flask(__name__)
 CORS(app)
@@ -62,7 +63,7 @@ class User(db.Model):
 
 class CallLog(db.Model):
     __tablename__ = "call_logs"
-    __table_args__ = (db.UniqueConstraint("user_id", "date_millis", "number", name="uq_user_date_number"))
+    __table_args__ = (db.UniqueConstraint("user_id", "date_millis", "number", name="uq_user_date_number"),)
     id               = db.Column(db.BigInteger, primary_key=True)
     user_id          = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     number           = db.Column(db.String(32), nullable=False)
@@ -171,33 +172,25 @@ def export_call_logs():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-
     payload = request.get_json() or []
     for d in payload:
         date_millis = d.get("dateMillis", d.get("date_millis"))
-        duration   = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
-        number     = d.get("number", "")
-        ctype      = d.get("type", 0)
-        pres       = d.get("presentation", 0)
-
+        duration = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
+        number = d.get("number", "")
+        ctype = d.get("type", 0)
+        pres = d.get("presentation", 0)
         if date_millis is None or duration is None:
             continue
-
-        exists = CallLog.query.filter_by(
-            user_id     = uid,
-            date_millis = date_millis,
-            number      = number
-        ).first()
+        exists = CallLog.query.filter_by(user_id=uid, date_millis=date_millis, number=number).first()
         if exists:
             continue
-
         db.session.add(CallLog(
-            user_id          = uid,
-            number           = number,
-            date_millis      = date_millis,
-            duration_seconds = duration,
-            type             = ctype,
-            presentation     = pres
+            user_id=uid,
+            number=number,
+            date_millis=date_millis,
+            duration_seconds=duration,
+            type=ctype,
+            presentation=pres
         ))
     db.session.commit()
     return jsonify(success=True)
@@ -231,23 +224,18 @@ def run_hourly_exports_db():
         while True:
             try:
                 users = db.session.query(User).all()
-
                 for u in users:
                     calls = db.session.query(CallLog).filter_by(user_id=u.id).all()
                     for c in calls:
-                        db.session.add(
-                            CallLog(
-                                user_id=u.id,
-                                number=c.number,
-                                date_millis=c.date_millis,
-                                duration_seconds=c.duration_seconds,
-                                type=c.type,
-                                presentation=c.presentation
-                            )
-                        )
-
+                        db.session.add(CallLog(
+                            user_id=u.id,
+                            number=c.number,
+                            date_millis=c.date_millis,
+                            duration_seconds=c.duration_seconds,
+                            type=c.type,
+                            presentation=c.presentation
+                        ))
                 db.session.commit()
-
             except OperationalError as oe:
                 if getattr(oe.orig, "args", [None])[0] == 1412:
                     print("DDL changed mid-transaction, retrying export loop")
@@ -256,20 +244,17 @@ def run_hourly_exports_db():
                 else:
                     print("OperationalError in export loop:", oe)
                     db.session.rollback()
-
             except Exception as e:
                 print("Error in export loop:", e)
                 db.session.rollback()
-
             finally:
                 db.session.remove()
-
             time.sleep(30 * 60)
 
 Thread(target=run_hourly_exports_db, daemon=True).start()
 
 def get_credentials():
-    creds_path = pathlib.Path(__file__).parent / config["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
+    creds_path = pathlib.Path(__file__).parent / config["General"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
         str(creds_path),
         scopes=['https://www.googleapis.com/auth/spreadsheets.readonly','https://www.googleapis.com/auth/drive.readonly']
@@ -298,18 +283,9 @@ async def export_spreadsheet(spreadsheet_id, export_mode, column_name, txt_file_
             return None
     return file_path
 
-async def initial_export():
-    for sc in config["Spreadsheets"]:
-        await export_spreadsheet(
-            sc["GOOGLE_SPREADSHEET_ID"],
-            sc["ExportMode"],
-            sc.get("ColumnName",""),
-            sc["TXT_FILE_NAME"],
-            sc.get("ExportFormat","csv"),
-            sc["FILE_NAME"]
-        )
-
 async def run_every_hour():
+    creds = get_credentials()
+    sheets_api = build('sheets', 'v4', credentials=creds).spreadsheets()
     while True:
         for sc in config["Spreadsheets"]:
             await export_spreadsheet(
@@ -320,6 +296,27 @@ async def run_every_hour():
                 sc.get("ExportFormat","csv"),
                 sc["FILE_NAME"]
             )
+        try:
+            target = config["General"]["EXPORT_SPREADSHEET_ID"]
+            rows = []
+            for c in db.session.query(CallLog).order_by(CallLog.date_millis).all():
+                rows.append([
+                    str(c.user_id),
+                    c.number,
+                    str(c.date_millis),
+                    str(c.duration_seconds),
+                    str(c.type),
+                    str(c.presentation)
+                ])
+            sheets_api.values().clear(spreadsheetId=target, range="Sheet1").execute()
+            sheets_api.values().update(
+                spreadsheetId=target,
+                range="Sheet1!A1",
+                valueInputOption="RAW",
+                body={"values": rows}
+            ).execute()
+        except Exception as e:
+            print("Error pushing DB to sheet:", e)
         await asyncio.sleep(3600)
 
 def start_asyncio_loop():
