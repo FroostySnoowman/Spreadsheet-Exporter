@@ -2,7 +2,6 @@ pyyaml==6.0.2
 gsheets==0.6.1
 flask==3.0.3
 pandas==2.2.3
-
 Flask-SQLAlchemy==3.1.1
 Flask-Bcrypt==1.0.1
 Flask-JWT-Extended==4.7.1
