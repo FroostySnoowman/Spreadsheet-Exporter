@@ -219,7 +219,7 @@ def admin_export_all():
     return jsonify(success=True)
 
 def get_credentials():
-    creds_path = pathlib.Path(__file__).parent / config["General"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
+    creds_path = pathlib.Path(__file__).parent / config["Google"]["GOOGLE_SERVICE_ACCOUNT_FILE"]
     return service_account.Credentials.from_service_account_file(
         str(creds_path),
         scopes=['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
@@ -263,7 +263,7 @@ async def run_every_hour():
                     sc["FILE_NAME"]
                 )
             try:
-                target = config["General"]["EXPORT_SPREADSHEET_ID"]
+                target = config["Google"]["EXPORT_SPREADSHEET_ID"]
                 rows = []
                 for c in db.session.query(CallLog).order_by(CallLog.date_millis).all():
                     rows.append([
