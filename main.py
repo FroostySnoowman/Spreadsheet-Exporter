@@ -3,6 +3,7 @@ import datetime
 import pathlib
 import time
 import yaml
+import os
 from threading import Thread
 from flask import Flask, jsonify, request, send_file
 from flask_bcrypt import Bcrypt
@@ -10,6 +11,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from flask_sqlalchemy import SQLAlchemy
 from gsheets import Sheets
+from googleapiclient.discovery import build
 from google.oauth2 import service_account
 
 app = Flask(__name__)
@@ -110,14 +112,16 @@ def post_call():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
-    d = request.get_json()
+    d = request.get_json() or {}
+    date_millis = d.get("dateMillis", d.get("date_millis"))
+    duration_seconds = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
     db.session.add(CallLog(
         user_id=uid,
-        number=d["number"],
-        date_millis=d["dateMillis"],
-        duration_seconds=d["durationSecs"],
-        type=d["type"],
-        presentation=d["presentation"]
+        number=d.get("number", ""),
+        date_millis=date_millis or 0,
+        duration_seconds=duration_seconds or 0,
+        type=d.get("type", 0),
+        presentation=d.get("presentation", 0)
     ))
     db.session.commit()
     return jsonify(success=True)
@@ -169,13 +173,17 @@ def export_call_logs():
         return jsonify(message="Invalid identity"), 422
     payload = request.get_json() or []
     for d in payload:
+        date_millis = d.get("dateMillis", d.get("date_millis"))
+        duration_seconds = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
+        if date_millis is None or duration_seconds is None:
+            continue
         db.session.add(CallLog(
             user_id=uid,
-            number=d["number"],
-            date_millis=d["date_millis"],
-            duration_seconds=d["duration_seconds"],
-            type=d["type"],
-            presentation=d["presentation"]
+            number=d.get("number", ""),
+            date_millis=date_millis,
+            duration_seconds=duration_seconds,
+            type=d.get("type", 0),
+            presentation=d.get("presentation", 0)
         ))
     db.session.commit()
     return jsonify(success=True)
