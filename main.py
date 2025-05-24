@@ -62,14 +62,15 @@ class User(db.Model):
 
 class CallLog(db.Model):
     __tablename__ = "call_logs"
-    id = db.Column(db.BigInteger, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    number = db.Column(db.String(32), nullable=False)
-    date_millis = db.Column(db.BigInteger, nullable=False)
+    __table_args__ = (db.UniqueConstraint("user_id", "date_millis", "number", name="uq_user_date_number"))
+    id               = db.Column(db.BigInteger, primary_key=True)
+    user_id          = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    number           = db.Column(db.String(32), nullable=False)
+    date_millis      = db.Column(db.BigInteger, nullable=False)
     duration_seconds = db.Column(db.BigInteger, nullable=False)
-    type = db.Column(db.Integer, nullable=False)
-    presentation = db.Column(db.Integer, nullable=False)
-    user = db.relationship("User", backref="calls")
+    type             = db.Column(db.Integer, nullable=False)
+    presentation     = db.Column(db.Integer, nullable=False)
+    user             = db.relationship("User", backref="calls")
 
 @app.post("/api/register")
 def register():
@@ -170,19 +171,33 @@ def export_call_logs():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
+
     payload = request.get_json() or []
     for d in payload:
         date_millis = d.get("dateMillis", d.get("date_millis"))
-        duration_seconds = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
-        if date_millis is None or duration_seconds is None:
+        duration   = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
+        number     = d.get("number", "")
+        ctype      = d.get("type", 0)
+        pres       = d.get("presentation", 0)
+
+        if date_millis is None or duration is None:
             continue
+
+        exists = CallLog.query.filter_by(
+            user_id     = uid,
+            date_millis = date_millis,
+            number      = number
+        ).first()
+        if exists:
+            continue
+
         db.session.add(CallLog(
-            user_id=uid,
-            number=d.get("number", ""),
-            date_millis=date_millis,
-            duration_seconds=duration_seconds,
-            type=d.get("type", 0),
-            presentation=d.get("presentation", 0)
+            user_id          = uid,
+            number           = number,
+            date_millis      = date_millis,
+            duration_seconds = duration,
+            type             = ctype,
+            presentation     = pres
         ))
     db.session.commit()
     return jsonify(success=True)
