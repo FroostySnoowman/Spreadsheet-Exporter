@@ -3,7 +3,6 @@ import datetime
 import pathlib
 import time
 import yaml
-import os
 from threading import Thread
 from flask import Flask, jsonify, request, send_file
 from flask_bcrypt import Bcrypt
@@ -11,7 +10,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from flask_sqlalchemy import SQLAlchemy
 from gsheets import Sheets
-from googleapiclient.discovery import build
+from sqlalchemy.exc import OperationalError
 from google.oauth2 import service_account
 
 app = Flask(__name__)
@@ -215,17 +214,41 @@ def admin_export_all():
 def run_hourly_exports_db():
     with app.app_context():
         while True:
-            for u in User.query.all():
-                for c in u.calls:
-                    db.session.add(CallLog(
-                        user_id=u.id,
-                        number=c.number,
-                        date_millis=c.date_millis,
-                        duration_seconds=c.duration_seconds,
-                        type=c.type,
-                        presentation=c.presentation
-                    ))
-            db.session.commit()
+            try:
+                users = db.session.query(User).all()
+
+                for u in users:
+                    calls = db.session.query(CallLog).filter_by(user_id=u.id).all()
+                    for c in calls:
+                        db.session.add(
+                            CallLog(
+                                user_id=u.id,
+                                number=c.number,
+                                date_millis=c.date_millis,
+                                duration_seconds=c.duration_seconds,
+                                type=c.type,
+                                presentation=c.presentation
+                            )
+                        )
+
+                db.session.commit()
+
+            except OperationalError as oe:
+                if getattr(oe.orig, "args", [None])[0] == 1412:
+                    print("DDL changed mid-transaction, retrying export loop")
+                    db.session.rollback()
+                    continue
+                else:
+                    print("OperationalError in export loop:", oe)
+                    db.session.rollback()
+
+            except Exception as e:
+                print("Error in export loop:", e)
+                db.session.rollback()
+
+            finally:
+                db.session.remove()
+
             time.sleep(30 * 60)
 
 Thread(target=run_hourly_exports_db, daemon=True).start()
