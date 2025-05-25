@@ -354,7 +354,7 @@ async def run_every_hour():
                 meta = sheets_api.get(spreadsheetId=target).execute()
                 existing = [sh['properties']['title'] for sh in meta.get('sheets', [])]
 
-                combined_title = "Combined"
+                combined_title = "No Service"
                 if combined_title not in existing:
                     sheets_api.batchUpdate(
                         spreadsheetId=target,
@@ -367,7 +367,7 @@ async def run_every_hour():
                 combined_rows = [
                     [c.number, str(c.date_millis), str(c.duration_seconds), str(c.type)]
                     for c in CallLog.query
-                        .filter(CallLog.presentation != 3)
+                        .filter(CallLog.presentation == 3)
                         .order_by(CallLog.date_millis)
                         .all()
                 ]
