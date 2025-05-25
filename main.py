@@ -133,20 +133,42 @@ def stats():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
+
+    req_user = request.args.get("userId", type=int)
+    if req_user is not None:
+        current = db.session.get(User, uid)
+        if not current or not current.is_admin:
+            return jsonify(message="Forbidden"), 403
+        target_uid = req_user
+    else:
+        target_uid = uid
+
     start = request.args.get("start", type=int, default=0)
-    end = request.args.get("end", type=int, default=2**63-1)
-    calls = CallLog.query.filter(CallLog.user_id==uid, CallLog.date_millis.between(start, end)).all()
-    total = len(calls)
-    connected = sum(c.duration_seconds > 25 for c in calls)
-    no_answer = [c for c in calls if c.type==3]
-    no_service = [c for c in calls if c.presentation==3]
+    end   = request.args.get("end",   type=int, default=2**63-1)
+
+    calls = CallLog.query.filter(
+        CallLog.user_id == target_uid,
+        CallLog.date_millis.between(start, end)
+    ).all()
+
+    total      = len(calls)
+    connected  = sum(c.duration_seconds > 25 for c in calls)
+    no_answer  = [c for c in calls if c.type == 3]
+    no_service = [c for c in calls if c.presentation == 3]
+
     return jsonify(
-        total=total,
-        connected=connected,
-        noAnswer=len(no_answer),
-        noService=len(no_service),
-        noAnswerEntries=[{"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds} for c in no_answer],
-        noServiceEntries=[{"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds} for c in no_service]
+        total            = total,
+        connected        = connected,
+        noAnswer         = len(no_answer),
+        noService        = len(no_service),
+        noAnswerEntries  = [
+            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds}
+            for c in no_answer
+        ],
+        noServiceEntries = [
+            {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds}
+            for c in no_service
+        ]
     )
 
 @app.get("/api/admin/users")
