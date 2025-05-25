@@ -144,23 +144,23 @@ def stats():
         target_uid = uid
 
     start = request.args.get("start", type=int, default=0)
-    end   = request.args.get("end",   type=int, default=2**63-1)
+    end = request.args.get("end",   type=int, default=2**63-1)
 
     calls = CallLog.query.filter(
         CallLog.user_id == target_uid,
         CallLog.date_millis.between(start, end)
     ).all()
 
-    total      = len(calls)
-    connected  = sum(c.duration_seconds > 25 for c in calls)
-    no_answer  = [c for c in calls if c.type == 3]
+    total = len(calls)
+    connected = sum(c.duration_seconds > 25 for c in calls)
+    no_answer = [c for c in calls if c.type == 3]
     no_service = [c for c in calls if c.presentation == 3]
 
     return jsonify(
-        total            = total,
-        connected        = connected,
-        noAnswer         = len(no_answer),
-        noService        = len(no_service),
+        total = total,
+        connected = connected,
+        noAnswer = len(no_answer),
+        noService = len(no_service),
         noAnswerEntries  = [
             {"number":c.number,"dateMillis":c.date_millis,"durationSecs":c.duration_seconds}
             for c in no_answer
@@ -219,6 +219,36 @@ def demote_user(id):
     user.is_admin = False
     db.session.commit()
     return jsonify(success=True)
+
+@app.get("/api/admin/users/<int:id>/calls")
+@jwt_required()
+def admin_user_calls(id):
+    raw = get_jwt_identity()
+    try:
+        uid = int(raw)
+    except:
+        return jsonify(message="Invalid identity"), 422
+    admin = db.session.get(User, uid)
+    if not admin or not admin.is_admin:
+        return jsonify(message="Forbidden"), 403
+
+    start = request.args.get("start", type=int, default=0)
+    end = request.args.get("end",   type=int, default=2**63-1)
+    calls = CallLog.query.filter(
+        CallLog.user_id==id,
+        CallLog.date_millis.between(start, end)
+    ).order_by(CallLog.date_millis.desc()).all()
+
+    return jsonify([
+      {
+        "number": c.number,
+        "dateMillis": c.date_millis,
+        "durationSecs": c.duration_seconds,
+        "type": c.type,
+        "presentation": c.presentation
+      }
+      for c in calls
+    ])
 
 @app.post("/api/export")
 @jwt_required()
