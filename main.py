@@ -351,25 +351,39 @@ async def run_every_hour():
                 )
             try:
                 target = config["Google"]["EXPORT_SPREADSHEET_ID"]
-                rows=[]
-                for c in db.session.query(CallLog).order_by(CallLog.date_millis).all():
-                    rows.append([
-                        str(c.user_id),
-                        c.number,
-                        str(c.date_millis),
-                        str(c.duration_seconds),
-                        str(c.type),
-                        str(c.presentation)
-                    ])
-                sheets_api.values().clear(spreadsheetId=target,range="Sheet1").execute()
-                sheets_api.values().update(
-                    spreadsheetId=target,
-                    range="Sheet1!A1",
-                    valueInputOption="RAW",
-                    body={"values":rows}
-                ).execute()
+                meta = sheets_api.get(spreadsheetId=target).execute()
+                existing = [sh['properties']['title'] for sh in meta.get('sheets', [])]
+                for u in User.query.all():
+                    title = u.username
+                    if title not in existing:
+                        sheets_api.batchUpdate(
+                            spreadsheetId=target,
+                            body={
+                                "requests": [{
+                                    "addSheet": {"properties": {"title": title}}
+                                }]
+                            }
+                        ).execute()
+                    rows = [
+                        [c.number, str(c.date_millis), str(c.duration_seconds), str(c.type), str(c.presentation)]
+                        for c in CallLog.query
+                            .filter_by(user_id=u.id)
+                            .order_by(CallLog.date_millis)
+                            .all()
+                    ]
+                    sheets_api.values().clear(
+                        spreadsheetId=target,
+                        range=f"'{title}'!A1:Z10000"
+                    ).execute()
+                    if rows:
+                        sheets_api.values().update(
+                            spreadsheetId=target,
+                            range=f"'{title}'!A1",
+                            valueInputOption="RAW",
+                            body={"values": rows}
+                        ).execute()
             except Exception as e:
-                print("Error pushing DB to sheet:",e)
+                print("Error pushing DB to sheet:", e)
             await asyncio.sleep(3600)
 
 def start_asyncio_loop():
