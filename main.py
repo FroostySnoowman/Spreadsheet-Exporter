@@ -353,17 +353,46 @@ async def run_every_hour():
                 target = config["Google"]["EXPORT_SPREADSHEET_ID"]
                 meta = sheets_api.get(spreadsheetId=target).execute()
                 existing = [sh['properties']['title'] for sh in meta.get('sheets', [])]
+
+                combined_title = "Combined"
+                if combined_title not in existing:
+                    sheets_api.batchUpdate(
+                        spreadsheetId=target,
+                        body={"requests":[{"addSheet":{
+                            "properties":{"title":combined_title,"index":0}
+                        }}]}
+                    ).execute()
+                    existing.insert(0, combined_title)
+
+                combined_rows = [
+                    [c.number, str(c.date_millis), str(c.duration_seconds), str(c.type)]
+                    for c in CallLog.query
+                        .filter(CallLog.presentation != 3)
+                        .order_by(CallLog.date_millis)
+                        .all()
+                ]
+                sheets_api.values().clear(
+                    spreadsheetId=target,
+                    range=f"'{combined_title}'!A1:Z10000"
+                ).execute()
+                if combined_rows:
+                    sheets_api.values().update(
+                        spreadsheetId=target,
+                        range=f"'{combined_title}'!A1",
+                        valueInputOption="RAW",
+                        body={"values": combined_rows}
+                    ).execute()
+
                 for u in User.query.all():
                     title = u.username
                     if title not in existing:
                         sheets_api.batchUpdate(
                             spreadsheetId=target,
-                            body={
-                                "requests": [{
-                                    "addSheet": {"properties": {"title": title}}
-                                }]
-                            }
+                            body={"requests":[{"addSheet":{
+                                "properties":{"title":title}
+                            }}]}
                         ).execute()
+                        existing.append(title)
                     rows = [
                         [c.number, str(c.date_millis), str(c.duration_seconds), str(c.type), str(c.presentation)]
                         for c in CallLog.query
