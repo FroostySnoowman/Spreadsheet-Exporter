@@ -11,6 +11,7 @@ from flask_sqlalchemy import SQLAlchemy
 from gsheets import Sheets
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from sqlalchemy.exc import IntegrityError
 
 app = Flask(__name__)
 CORS(app)
@@ -329,26 +330,33 @@ def export_call_logs():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
+
     payload = request.get_json() or []
     for d in payload:
         date_millis = d.get("dateMillis", d.get("date_millis"))
-        duration = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
-        number = d.get("number","")
-        ctype = d.get("type",0)
-        pres = d.get("presentation",0)
+        duration    = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
+        number      = d.get("number","")
+        ctype       = d.get("type",0)
+        pres        = d.get("presentation",0)
+
         if date_millis is None or duration is None:
             continue
-        exists = CallLog.query.filter_by(user_id=uid, date_millis=date_millis, number=number).first()
-        if exists:
-            continue
-        db.session.add(CallLog(
+
+        new_call = CallLog(
             user_id=uid,
             number=number,
             date_millis=date_millis,
             duration_seconds=duration,
             type=ctype,
             presentation=pres
-        ))
+        )
+        db.session.add(new_call)
+        try:
+            db.session.flush()
+        except IntegrityError:
+            db.session.rollback()
+            continue
+
     db.session.commit()
     return jsonify(success=True)
 
