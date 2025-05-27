@@ -103,6 +103,31 @@ def me():
         return jsonify(message="User not found"), 404
     return jsonify(id=u.id, username=u.username, email=u.email, isAdmin=u.is_admin)
 
+@app.put("/api/me")
+@jwt_required()
+def update_me():
+    uid = int(get_jwt_identity())
+    d = request.get_json() or {}
+    u = db.session.get(User, uid)
+    if not u:
+        return jsonify(message="User not found"), 404
+
+    if "username" in d:
+        if User.query.filter_by(username=d["username"]).first() and u.username != d["username"]:
+            return jsonify(message="Username already taken"), 400
+        u.username = d["username"]
+
+    if "email" in d:
+        if User.query.filter_by(email=d["email"]).first() and u.email != d["email"]:
+            return jsonify(message="Email already taken"), 400
+        u.email = d["email"]
+
+    if "password" in d:
+        u.password_hash = bcrypt.generate_password_hash(d["password"]).decode()
+
+    db.session.commit()
+    return jsonify(success=True)
+
 @app.post("/api/call")
 @jwt_required()
 def post_call():
@@ -217,6 +242,52 @@ def demote_user(id):
     if not user:
         return jsonify(message="User not found"), 404
     user.is_admin = False
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.put("/api/admin/users/<int:id>")
+@jwt_required()
+def admin_edit_user(id):
+    admin_id = int(get_jwt_identity())
+    admin = db.session.get(User, admin_id)
+    if not admin or not admin.is_admin:
+        return jsonify(message="Forbidden"), 403
+
+    d = request.get_json() or {}
+    user = db.session.get(User, id)
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    if "username" in d:
+        if User.query.filter_by(username=d["username"]).first() and user.username != d["username"]:
+            return jsonify(message="Username already taken"), 400
+        user.username = d["username"]
+
+    if "email" in d:
+        if User.query.filter_by(email=d["email"]).first() and user.email != d["email"]:
+            return jsonify(message="Email already taken"), 400
+        user.email = d["email"]
+
+    if "password" in d:
+        user.password_hash = bcrypt.generate_password_hash(d["password"]).decode()
+
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.delete("/api/admin/users/<int:id>")
+@jwt_required()
+def admin_delete_user(id):
+    admin_id = int(get_jwt_identity())
+    admin = db.session.get(User, admin_id)
+    if not admin or not admin.is_admin:
+        return jsonify(message="Forbidden"), 403
+
+    user = db.session.get(User, id)
+    if not user:
+        return jsonify(message="User not found"), 404
+
+    CallLog.query.filter_by(user_id=user.id).delete()
+    db.session.delete(user)
     db.session.commit()
     return jsonify(success=True)
 
