@@ -8,6 +8,7 @@ from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import IntegrityError
 from gsheets import Sheets
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -329,27 +330,42 @@ def export_call_logs():
         uid = int(raw)
     except:
         return jsonify(message="Invalid identity"), 422
+
     payload = request.get_json() or []
+
     for d in payload:
         date_millis = d.get("dateMillis", d.get("date_millis"))
         duration = d.get("durationSecs", d.get("duration_seconds", d.get("durationSeconds")))
-        number = d.get("number","")
-        ctype = d.get("type",0)
-        pres = d.get("presentation",0)
+        number = d.get("number", "")
+        ctype = d.get("type", 0)
+        pres = d.get("presentation", 0)
+
         if date_millis is None or duration is None:
             continue
-        exists = CallLog.query.filter_by(user_id=uid, date_millis=date_millis, number=number).first()
+
+        exists = (
+            CallLog.query
+            .filter_by(user_id=uid, date_millis=date_millis, number=number)
+            .first()
+        )
         if exists:
             continue
-        db.session.add(CallLog(
+
+        entry = CallLog(
             user_id=uid,
             number=number,
             date_millis=date_millis,
             duration_seconds=duration,
             type=ctype,
             presentation=pres
-        ))
-    db.session.commit()
+        )
+
+        db.session.add(entry)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+
     return jsonify(success=True)
 
 @app.post("/api/admin/export")
